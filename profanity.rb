@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 # encoding: US-ASCII
-# vim: set sts=8:
+# vim: set sts=2 noet ts=2:
 =begin
 
   ProfanityFE v0.4
@@ -1163,7 +1163,7 @@ key_action['send_command'] = proc {
 	command_buffer_offset = 0
 	need_prompt = false
 	if window = stream_handler['main']
-                add_prompt(window, prompt_text, cmd)
+		add_prompt(window, prompt_text, cmd)
 	end
 	command_window.deleteln
 	command_window.setpos(0,0)
@@ -1202,7 +1202,7 @@ key_action['send_command'] = proc {
 key_action['send_last_command'] = proc {
 	if cmd = command_history[1]
 		if window = stream_handler['main']
-                        add_prompt(window, prompt_text, cmd)
+			add_prompt(window, prompt_text, cmd)
 			#window.add_string(">#{cmd}", [ h={ :start => 0, :end => (cmd.length + 1), :fg => '555555' } ])
 			command_window.noutrefresh
 			Curses.doupdate
@@ -1230,7 +1230,7 @@ key_action['send_last_command'] = proc {
 key_action['send_second_last_command'] = proc {
 	if cmd = command_history[2]
 		if window = stream_handler['main']
-                        add_prompt(window, prompt_text, cmd)
+			add_prompt(window, prompt_text, cmd)
 			#window.add_string(">#{cmd}", [ h={ :start => 0, :end => (cmd.length + 1), :fg => '555555' } ])
 			command_window.noutrefresh
 			Curses.doupdate
@@ -1343,7 +1343,7 @@ Thread.new {
 				else
 					if need_prompt
 						need_prompt = false
-                                                add_prompt(stream_handler['main'], prompt_text)
+						add_prompt(stream_handler['main'], prompt_text)
 					end
 					stream_handler['main'].add_string String.new
 					need_update = true
@@ -1358,11 +1358,11 @@ Thread.new {
 							skip_server_time_offset = true
 						end
 						need_prompt = true
-                                                new_prompt_text = "#{$3}>"
-                                                if prompt_text != new_prompt_text
-                                                  prompt_text = new_prompt_text
-                                                  add_prompt(stream_handler['main'], new_prompt_text)
-                                                end
+						new_prompt_text = "#{$3}>"
+						if prompt_text != new_prompt_text
+							prompt_text = new_prompt_text
+							add_prompt(stream_handler['main'], new_prompt_text)
+						end
 					elsif xml =~ /^<spell>(.*?)<\/spell>$/
 						nil
 #					elsif xml =~ /^<right/
@@ -1722,7 +1722,7 @@ Thread.new {
 								unless line.empty?
 									if need_prompt
 										need_prompt = false
-                                                                                add_prompt(window, prompt_text)
+										add_prompt(window, prompt_text)
 									end
 									window.add_string(line, line_colors)
 									need_update = true
@@ -1738,7 +1738,7 @@ Thread.new {
 						if window = stream_handler['main']
 							if need_prompt
 								need_prompt = false
-                                                                add_prompt(window, prompt_text)
+								add_prompt(window, prompt_text)
 							end
 							window.add_string(line, line_colors)
 							need_update = true
