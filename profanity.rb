@@ -1,20 +1,21 @@
 #!/usr/bin/env ruby
 # encoding: US-ASCII
+# vim: set sts=8:
 =begin
 
   ProfanityFE v0.4
 	Copyright (C) 2013  Matthew Lowe
-	
+
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
 	the Free Software Foundation; either version 2 of the License, or
 	(at your option) any later version.
-	
+
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 	GNU General Public License for more details.
-	
+
 	You should have received a copy of the GNU General Public License along
 	with this program; if not, write to the Free Software Foundation, Inc.,
 	51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
@@ -83,7 +84,7 @@ class TextWindow < Curses::Window
 	def add_string(string, string_colors=Array.new)
 		#
 		# word wrap string, split highlights if needed so each wrapped line is independent, update buffer, update window if needed
-		# 
+		#
 		while (line = string.slice!(/^.{2,#{maxx-1}}(?=\s|$)/)) or (line = string.slice!(0,(maxx-1)))
 			line_colors = Array.new
 			for h in string_colors
@@ -388,6 +389,7 @@ skip_server_time_offset = false
 key_binding = Hash.new
 key_action = Hash.new
 need_prompt = false
+prompt_text = ">"
 stream_handler = Hash.new
 indicator_handler = Hash.new
 progress_handler = Hash.new
@@ -399,6 +401,10 @@ PRESET = Hash.new
 LAYOUT = Hash.new
 WINDOWS = Hash.new
 SCROLL_WINDOW = Array.new
+
+def add_prompt(window, prompt_text, cmd="")
+  window.add_string("#{prompt_text}#{cmd}", [ h={ :start => 0, :end => (prompt_text.length + cmd.length), :fg => '555555' } ])
+end
 
 for arg in ARGV
 	if arg =~ /^\-\-help|^\-h|^\-\?/
@@ -761,7 +767,7 @@ load_layout = proc { |layout_id|
 							window.scrollok(true)
 							window.max_buffer_size = e.attributes['buffer-size'] || 1000
 							window.scrollbar = Curses::Window.new(window.maxy, 1, window.begy, window.begx + window.maxx)
-							e.attributes['value'].split(',').each { |str| 
+							e.attributes['value'].split(',').each { |str|
 								stream_handler[str] = window
 							}
 							window.maxy.times { window.add_string "\n" }
@@ -1157,7 +1163,7 @@ key_action['send_command'] = proc {
 	command_buffer_offset = 0
 	need_prompt = false
 	if window = stream_handler['main']
-		window.add_string(">#{cmd}", [ h={ :start => 0, :end => (cmd.length + 1), :fg => '555555' } ])
+                add_prompt(window, prompt_text, cmd)
 	end
 	command_window.deleteln
 	command_window.setpos(0,0)
@@ -1196,7 +1202,8 @@ key_action['send_command'] = proc {
 key_action['send_last_command'] = proc {
 	if cmd = command_history[1]
 		if window = stream_handler['main']
-			window.add_string(">#{cmd}", [ h={ :start => 0, :end => (cmd.length + 1), :fg => '555555' } ])
+                        add_prompt(window, prompt_text, cmd)
+			#window.add_string(">#{cmd}", [ h={ :start => 0, :end => (cmd.length + 1), :fg => '555555' } ])
 			command_window.noutrefresh
 			Curses.doupdate
 		end
@@ -1223,7 +1230,8 @@ key_action['send_last_command'] = proc {
 key_action['send_second_last_command'] = proc {
 	if cmd = command_history[2]
 		if window = stream_handler['main']
-			window.add_string(">#{cmd}", [ h={ :start => 0, :end => (cmd.length + 1), :fg => '555555' } ])
+                        add_prompt(window, prompt_text, cmd)
+			#window.add_string(">#{cmd}", [ h={ :start => 0, :end => (cmd.length + 1), :fg => '555555' } ])
 			command_window.noutrefresh
 			Curses.doupdate
 		end
@@ -1335,7 +1343,7 @@ Thread.new {
 				else
 					if need_prompt
 						need_prompt = false
-						stream_handler['main'].add_string('>', [ h={ :start => 0, :end => 1, :fg => '555555' } ])
+                                                add_prompt(stream_handler['main'], prompt_text)
 					end
 					stream_handler['main'].add_string String.new
 					need_update = true
@@ -1344,12 +1352,17 @@ Thread.new {
 				while (start_pos = (line =~ /(<(prompt|spell|right|left|inv).*?\2>|<.*?>)/))
 					xml = $1
 					line.slice!(start_pos, xml.length)
-					if xml =~ /^<prompt time=('|")([0-9]+)\1.*?>(.*?)<\/prompt>$/
+					if xml =~ /^<prompt time=('|")([0-9]+)\1.*?>(.*?)&gt;<\/prompt>$/
 						unless skip_server_time_offset
 							$server_time_offset = Time.now.to_f - $2.to_f
 							skip_server_time_offset = true
 						end
 						need_prompt = true
+                                                new_prompt_text = "#{$3}>"
+                                                if prompt_text != new_prompt_text
+                                                  prompt_text = new_prompt_text
+                                                  add_prompt(stream_handler['main'], new_prompt_text)
+                                                end
 					elsif xml =~ /^<spell>(.*?)<\/spell>$/
 						nil
 #					elsif xml =~ /^<right/
@@ -1709,7 +1722,7 @@ Thread.new {
 								unless line.empty?
 									if need_prompt
 										need_prompt = false
-										window.add_string('>', [ h={ :start => 0, :end => 1, :fg => '555555' } ])
+                                                                                add_prompt(window, prompt_text)
 									end
 									window.add_string(line, line_colors)
 									need_update = true
@@ -1725,7 +1738,7 @@ Thread.new {
 						if window = stream_handler['main']
 							if need_prompt
 								need_prompt = false
-								window.add_string('>', [ h={ :start => 0, :end => 1, :fg => '555555' } ])
+                                                                add_prompt(window, prompt_text)
 							end
 							window.add_string(line, line_colors)
 							need_update = true
