@@ -3,7 +3,7 @@
 # vim: set sts=2 noet ts=2:
 =begin
 
-  ProfanityFE v0.4
+	ProfanityFE v0.4
 	Copyright (C) 2013  Matthew Lowe
 
 	This program is free software; you can redistribute it and/or modify
@@ -1318,29 +1318,216 @@ Thread.new { sleep 15; skip_server_time_offset = false }
 
 Thread.new {
 	begin
+		line = nil
 		need_update = false
-		in_compass = false
-		compass_dirs = Array.new
 		line_colors = Array.new
 		open_monsterbold = Array.new
 		open_preset = Array.new
 		open_style = nil
 		open_color = Array.new
-		current_sream = nil
+		current_stream = nil
 		in_stream = false
-		multiline = String.new
 
-		# fixme
-		main_stream   = { :text => String.new, :colors => Array.new }
-		open_stream   = Array.new
-		closed_stream = Array.new
+		handle_game_text = proc { |text|
+
+			for escapable in xml_escape_list.keys
+				search_pos = 0
+				while (pos = text.index(escapable, search_pos))
+					text = text.sub(escapable, xml_escape_list[escapable])
+					line_colors.each { |h|
+						h[:start] -= (escapable.length - 1) if h[:start] > pos
+						h[:end] -= (escapable.length - 1) if h[:end] > pos
+					}
+					if open_style and (open_style[:start] > pos)
+						open_style[:start] -= (escapable.length - 1)
+					end
+				end
+			end
+
+			if text =~ /^\[.*?\]>/
+				need_prompt = false
+			elsif text =~ /^\s*You are stunned for ([0-9]+) rounds?/
+				if window = countdown_handler['stunned']
+					temp_stun_end = Time.now.to_f - $server_time_offset.to_f + ($1.to_i * 5)
+					window.end_time = temp_stun_end
+					window.update
+					need_update = true
+					Thread.new {
+						while (countdown_handler['stunned'].end_time == temp_stun_end) and (countdown_handler['stunned'].value > 0)
+							sleep 0.15
+							if countdown_handler['stunned'].update
+								command_window.noutrefresh
+								Curses.doupdate
+							end
+						end
+					}
+				end
+			elsif text =~ /^Deep and resonating, you feel the chant that falls from your lips instill within you with the strength of your faith\.  You crouch beside [A-Z][a-z]+ and gently lift (?:he|she|him|her) into your arms, your muscles swelling with the power of your deity, and cradle (?:him|her) close to your chest\.  Strength and life momentarily seep from your limbs, causing them to feel laden and heavy, and you are overcome with a sudden weakness\.  With a sigh, you are able to lay [A-Z][a-z]+ back down\.$|^Moisture beads upon your skin and you feel your eyes cloud over with the darkness of a rising storm\.  Power builds upon the air and when you utter the last syllable of your spell thunder rumbles from your lips\.  The sound ripples upon the air, and colling with [A-Z][a-z&apos;]+ prone form and a brilliant flash transfers the spiritual energy between you\.$|^Lifting your finger, you begin to chant and draw a series of conjoined circles in the air\.  Each circle turns to mist and takes on a different hue - white, blue, black, red, and green\.  As the last ring is completed, you spread your fingers and gently allow your tips to touch each color before pushing the misty creation towards [A-Z][a-z]+\.  A shock of energy courses through your body as the mist seeps into [A-Z][a-z&apos;]+ chest and life is slowly returned to (?:his|her) body\.$|^Crouching beside the prone form of [A-Z][a-z]+, you softly issue the last syllable of your chant\.  Breathing deeply, you take in the scents around you and let the feel of your surroundings infuse you\.  With only your gaze, you track the area and recreate the circumstances of [A-Z][a-z&apos;]+ within your mind\.  Touching [A-Z][a-z]+, you follow the lines of the web that holds (?:his|her) soul in place and force it back into (?:his|her) body\.  Raw energy courses through you and you feel your sense of justice and vengeance filling [A-Z][a-z]+ with life\.$|^Murmuring softly, you call upon your connection with the Destroyer,? and feel your words twist into an alien, spidery chant\.  Dark shadows laced with crimson swirl before your eyes and at your forceful command sink into the chest of [A-Z][a-z]+\.  The transference of energy is swift and immediate as you bind [A-Z][a-z]+ back into (?:his|her) body\.$|^Rich and lively, the scent of wild flowers suddenly fills the air as you finish your chant, and you feel alive with the energy of spring\.  With renewal at your fingertips, you gently touch [A-Z][a-z]+ on the brow and revel in the sweet rush of energy that passes through you into (?:him|her|his)\.$|^Breathing slowly, you extend your senses towards the world around you and draw into you the very essence of nature\.  You shift your gaze towards [A-z][a-z]+ and carefully release the energy you&apos;ve drawn into yourself towards (?:him|her)\.  A rush of energy briefly flows between the two of you as you feel life slowly return to (?:him|her)\.$|^Your surroundings grow dim\.\.\.you lapse into a state of awareness only, unable to do anything\.\.\.$|^Murmuring softly, a mournful chant slips from your lips and you feel welts appear upon your wrists\.  Dipping them briefly, you smear the crimson liquid the leaks from these sudden wounds in a thin line down [A-Z][a-z&apos;]+ face\.  Tingling with each second that your skin touches (?:his|hers), you feel the transference of your raw energy pass into [A-Z][a-z]+ and momentarily reel with the pain of its release\.  Slowly, the wounds on your wrists heal, though a lingering throb remains\.$|^Emptying all breathe from your body, you slowly still yourself and close your eyes\.  You reach out with all of your senses and feel a film shift across your vision\.  Opening your eyes, you gaze through a white haze and find images of [A-Z][a-z]+ floating above his prone form\.  Acts of [A-Z][a-z]&apos;s? past, present, and future play out before your clouded vision\.  With conviction and faith, you pluck a future image of [A-Z][a-z]+ from the air and coax (?:he|she|his|her) back into (?:he|she|his|her) body\.  Slowly, the film slips from your eyes and images fade away\.$|^Thin at first, a fine layer of rime tickles your hands and fingertips\.  The hoarfrost smoothly glides between you and [A-Z][a-z]+, turning to a light powder as it traverses the space\.  The white substance clings to [A-Z][a-z]+&apos;s? eyelashes and cheeks for a moment before it becomes charged with spiritual power, then it slowly melts away\.$|^As you begin to chant,? you notice the scent of dry, dusty parchment and feel a cool mist cling to your skin somewhere near your feet\.  You sense the ethereal tendrils of the mist as they coil about your body and notice that the world turns to a yellowish hue as the mist settles about your head\.  Focusing on [A-Z][a-z]+, you feel the transfer of energy pass between you as you return (?:him|her) to life\.$|^Wrapped in an aura of chill, you close your eyes and softly begin to chant\.  As the cold air that surrounds you condenses you feel it slowly ripple outward in waves that turn the breath of those nearby into a fine mist\.  This mist swiftly moves to encompass you and you feel a pair of wings arc over your back\.  With the last words of your chant, you open your eyes and watch as foggy wings rise above you and gently brush against [A-Z][a-z]+\.  As they dissipate in a cold rush against [A-Z][a-z]+, you feel a surge of power spill forth from you and into (?:him|her)\.$|^As .*? begins to chant, your spirit is drawn closer to your body by the scent of dusty, dry parchment\.  Topaz tendrils coil about .*?, and you feel an ancient presence demand that you return to your body\.  All at once .*? focuses upon you and you feel a surge of energy bind you back into your now-living body\.$/
+				# raise dead stun
+				if window = countdown_handler['stunned']
+					temp_stun_end = Time.now.to_f - $server_time_offset.to_f + 30.6
+					window.end_time = temp_stun_end
+					window.update
+					need_update = true
+					Thread.new {
+						while (countdown_handler['stunned'].end_time == temp_stun_end) and (countdown_handler['stunned'].value > 0)
+							sleep 0.15
+							if countdown_handler['stunned'].update
+								command_window.noutrefresh
+								Curses.doupdate
+							end
+						end
+					}
+				end
+			elsif text =~ /^Just as you think the falling will never end, you crash through an ethereal barrier which bursts into a dazzling kaleidoscope of color!  Your sensation of falling turns to dizziness and you feel unusually heavy for a moment\.  Everything seems to stop for a prolonged second and then WHUMP!!!/
+				# Shadow Valley exit stun
+				if window = countdown_handler['stunned']
+					temp_stun_end = Time.now.to_f - $server_time_offset.to_f + 16.2
+					window.end_time = temp_stun_end
+					window.update
+					need_update = true
+					Thread.new {
+						while (countdown_handler['stunned'].end_time == temp_stun_end) and (countdown_handler['stunned'].value > 0)
+							sleep 0.15
+							if countdown_handler['stunned'].update
+								command_window.noutrefresh
+								Curses.doupdate
+							end
+						end
+					}
+				end
+			elsif text =~ /^You have.*?(?:case of uncontrollable convulsions|case of sporadic convulsions|strange case of muscle twitching)/
+				# nsys wound will be correctly set by xml, dont set the scar using health verb output
+				skip_nsys = true
+			else
+				if skip_nsys
+					skip_nsys = false
+				elsif window = indicator_handler['nsys']
+					if text =~ /^You have.*? very difficult time with muscle control/
+						if window.update(3)
+							need_update = true
+						end
+					elsif text =~ /^You have.*? constant muscle spasms/
+						if window.update(2)
+							need_update = true
+						end
+					elsif text =~ /^You have.*? developed slurred speech/
+						if window.update(1)
+							need_update = true
+						end
+					end
+				end
+			end
+
+			if open_style
+				h = open_style.dup
+				h[:end] = text.length
+				line_colors.push(h)
+				open_style[:start] = 0
+			end
+			# fixme: highlighting streams that won't even be shown
+			HIGHLIGHT.each_pair { |regex,colors|
+				pos = 0
+				while (match_data = text.match(regex, pos))
+					h = {
+						:start => match_data.begin(0),
+						:end => match_data.end(0),
+						:fg => colors[0],
+						:bg => colors[1],
+					}
+					line_colors.push(h)
+					pos = match_data.end(0)
+				end
+			}
+			if current_stream
+				unless text.empty?
+					if current_stream == 'thoughts'
+						if text =~ /^\[.+?\]\-[A-z]+\:[A-Z][a-z]+\: "|^\[server\]\: /
+							current_stream = 'lnet'
+						end
+					end
+					if window = stream_handler[current_stream]
+						if current_stream == 'death'
+							# fixme: has been vaporized!
+							# fixme: ~ off to a rough start
+							if text =~ /^\s\*\s(The death cry of )?([A-Z][a-z]+) (?:just bit the dust!|echoes in your mind!)/
+								front_count = 3
+								front_count += 17 if $1
+								name = $2
+								text = "#{name} #{Time.now.strftime('%l:%M%P').sub(/^0/, '')}"
+								line_colors.each { |h|
+									h[:start] -= front_count
+									h[:end] = [ h[:end], name.length ].min
+								}
+								line_colors.delete_if { |h| h[:start] >= h[:end] }
+								h = {
+									:start => (name.length+1),
+									:end => text.length,
+									:fg => 'ff0000',
+								}
+								line_colors.push(h)
+							end
+						elsif current_stream == 'logons'
+							foo = { 'joins the adventure.' => '007700', 'returns home from a hard day of adventuring.' => '777700', 'has disconnected.' => 'aa7733' }
+							if text =~ /^\s\*\s([A-Z][a-z]+) (#{foo.keys.join('|')})/
+								name = $1
+								logon_type = $2
+								text = "#{name} #{Time.now.strftime('%l:%M%P').sub(/^0/, '')}"
+								line_colors.each { |h|
+									h[:start] -= 3
+									h[:end] = [ h[:end], name.length ].min
+								}
+								line_colors.delete_if { |h| h[:start] >= h[:end] }
+								h = {
+									:start => (name.length+1),
+									:end => text.length,
+									:fg => foo[logon_type],
+								}
+								line_colors.push(h)
+							end
+						end
+						unless text =~ /^\[server\]: "(?:kill|connect)/
+							window.add_string(text, line_colors)
+							need_update = true
+						end
+					elsif current_stream =~ /^(?:death|logons|thoughts|voln|familiar)$/
+						if window = stream_handler['main']
+							# fixme: add color
+							unless text.empty?
+								if need_prompt
+									need_prompt = false
+									add_prompt(window, prompt_text)
+								end
+								window.add_string(text, line_colors)
+								need_update = true
+							end
+						end
+					else
+#						stream_handler['main'].add_string "#{current_stream}: #{text.inspect}"
+					end
+				end
+			else
+				unless text.empty?
+					if window = stream_handler['main']
+						if need_prompt
+							need_prompt = false
+							add_prompt(window, prompt_text)
+						end
+						window.add_string(text, line_colors)
+						need_update = true
+					end
+				end
+			end
+			line_colors = Array.new
+			open_monsterbold.clear
+			open_preset.clear
+			open_color.clear
+		}
 
 		while (line = server.gets)
 			line.chomp!
 			if line.empty?
-				if in_stream
-					multiline.concat "\n" # fixme
-				else
+				if current_stream.nil?
 					if need_prompt
 						need_prompt = false
 						add_prompt(stream_handler['main'], prompt_text)
@@ -1349,7 +1536,7 @@ Thread.new {
 					need_update = true
 				end
 			else
-				while (start_pos = (line =~ /(<(prompt|spell|right|left|inv).*?\2>|<.*?>)/))
+				while (start_pos = (line =~ /(<(prompt|spell|right|left|inv|compass).*?\2>|<.*?>)/))
 					xml = $1
 					line.slice!(start_pos, xml.length)
 					if xml =~ /^<prompt time=('|")([0-9]+)\1.*?>(.*?)&gt;<\/prompt>$/
@@ -1357,11 +1544,13 @@ Thread.new {
 							$server_time_offset = Time.now.to_f - $2.to_f
 							skip_server_time_offset = true
 						end
-						need_prompt = true
 						new_prompt_text = "#{$3}>"
 						if prompt_text != new_prompt_text
+							need_prompt = false
 							prompt_text = new_prompt_text
 							add_prompt(stream_handler['main'], new_prompt_text)
+						else
+							need_prompt = true
 						end
 					elsif xml =~ /^<spell>(.*?)<\/spell>$/
 						nil
@@ -1400,16 +1589,11 @@ Thread.new {
 								end
 							}
 						end
-					elsif xml == '<compass>'
-						in_compass = true
-						compass_dirs.clear
-					elsif in_compass and (xml =~ /^<dir value=('|")(up|down|out|n|ne|e|se|s|sw|w|nw)\1/)
-						compass_dirs.push($2)
-					elsif xml == '</compass>'
-						in_compass = false
+					elsif xml =~ /^<compass/
+						current_dirs = xml.scan(/<dir value="(.*?)"/).flatten
 						for dir in [ 'up', 'down', 'out', 'n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw' ]
 							if window = indicator_handler["compass:#{dir}"]
-								if window.update(compass_dirs.include?(dir))
+								if window.update(current_dirs.include?(dir))
 									need_update = true
 								end
 							end
@@ -1449,7 +1633,7 @@ Thread.new {
 							end
 						end
 					elsif xml == '<pushBold/>' or xml == '<b>'
-						h = { :start => (multiline.length + start_pos) }
+						h = { :start => start_pos }
 						if PRESET['monsterbold']
 							h[:fg] = PRESET['monsterbold'][0]
 							h[:bg] = PRESET['monsterbold'][1]
@@ -1457,11 +1641,11 @@ Thread.new {
 						open_monsterbold.push(h)
 					elsif xml == '<popBold/>' or xml == '</b>'
 						if h = open_monsterbold.pop
-							h[:end] = (multiline.length + start_pos)
+							h[:end] = start_pos
 							line_colors.push(h) if h[:fg] or h[:bg]
 						end
 					elsif xml =~ /^<preset id=('|")(.*?)\1>$/
-						h = { :start => (multiline.length + start_pos) }
+						h = { :start => start_pos }
 						if PRESET[$2]
 							h[:fg] = PRESET[$2][0]
 							h[:bg] = PRESET[$2][1]
@@ -1469,11 +1653,11 @@ Thread.new {
 						open_preset.push(h)
 					elsif xml == '</preset>'
 						if h = open_preset.pop
-							h[:end] = (multiline.length + start_pos)
+							h[:end] = start_pos
 							line_colors.push(h) if h[:fg] or h[:bg]
 						end
 					elsif xml =~ /^<color/
-						h = { :start => (multiline.length + start_pos) }
+						h = { :start => start_pos }
 						if xml =~ /\sfg=('|")(.*?)\1[\s>]/
 							h[:fg] = $2.downcase
 						end
@@ -1483,31 +1667,35 @@ Thread.new {
 						open_color.push(h)
 					elsif xml == '</color>'
 						if h = open_color.pop
-							h[:end] = (multiline.length + start_pos)
+							h[:end] = start_pos
 							line_colors.push(h) if h[:fg] or h[:bg]
 						end
 					elsif xml =~ /^<style id=('|")(.*?)\1/
 						if $2.empty?
 							if open_style
-								open_style[:end] = (multiline.length + start_pos)
+								open_style[:end] = start_pos
 								if (open_style[:start] < open_style[:end]) and (open_style[:fg] or open_style[:bg])
 									line_colors.push(open_style)
 								end
 								open_style = nil
 							end
 						else
-							open_style = { :start => (multiline.length + start_pos) }
+							open_style = { :start => start_pos }
 							if PRESET[$2]
 								open_style[:fg] = PRESET[$2][0]
 								open_style[:bg] = PRESET[$2][1]
 							end
 						end
 					elsif xml =~ /^<(?:pushStream|component) id=("|')(.*?)\1\/?>$/
-						current_stream = $2
+						new_stream = $2
+						game_text = line.slice!(0, start_pos)
+						handle_game_text.call(game_text)
+						current_stream = new_stream
 						in_stream = true
-					elsif xml =~ /^<popStream/
-						in_stream = false
-					elsif xml == '</component>'
+					elsif xml =~ /^<popStream/ or xml == '</component>'
+						game_text = line.slice!(0, start_pos)
+						handle_game_text.call(game_text)
+						current_stream = nil
 						in_stream = false
 					elsif xml =~ /^<progressBar/
 						nil
@@ -1550,205 +1738,7 @@ Thread.new {
 						nil
 					end
 				end
-
-				for escapable in xml_escape_list.keys
-					search_pos = 0
-					while (pos = line.index(escapable, search_pos))
-						line = line.sub(escapable, xml_escape_list[escapable])
-						line_colors.each { |h|
-							h[:start] -= (escapable.length - 1) if h[:start] > pos
-							h[:end] -= (escapable.length - 1) if h[:end] > pos
-						}
-						if open_style and (open_style[:start] > pos)
-							open_style[:start] -= (escapable.length - 1)
-						end
-					end
-				end
-
-				if line =~ /^\[.*?\]>/
-					need_prompt = false
-				elsif line =~ /^\s*You are stunned for ([0-9]+) rounds?/
-					if window = countdown_handler['stunned']
-						temp_stun_end = Time.now.to_f - $server_time_offset.to_f + ($1.to_i * 5)
-						window.end_time = temp_stun_end
-						window.update
-						need_update = true
-						Thread.new {
-							while (countdown_handler['stunned'].end_time == temp_stun_end) and (countdown_handler['stunned'].value > 0)
-								sleep 0.15
-								if countdown_handler['stunned'].update
-									command_window.noutrefresh
-									Curses.doupdate
-								end
-							end
-						}
-					end
-				elsif line =~ /^Deep and resonating, you feel the chant that falls from your lips instill within you with the strength of your faith\.  You crouch beside [A-Z][a-z]+ and gently lift (?:he|she|him|her) into your arms, your muscles swelling with the power of your deity, and cradle (?:him|her) close to your chest\.  Strength and life momentarily seep from your limbs, causing them to feel laden and heavy, and you are overcome with a sudden weakness\.  With a sigh, you are able to lay [A-Z][a-z]+ back down\.$|^Moisture beads upon your skin and you feel your eyes cloud over with the darkness of a rising storm\.  Power builds upon the air and when you utter the last syllable of your spell thunder rumbles from your lips\.  The sound ripples upon the air, and colling with [A-Z][a-z&apos;]+ prone form and a brilliant flash transfers the spiritual energy between you\.$|^Lifting your finger, you begin to chant and draw a series of conjoined circles in the air\.  Each circle turns to mist and takes on a different hue - white, blue, black, red, and green\.  As the last ring is completed, you spread your fingers and gently allow your tips to touch each color before pushing the misty creation towards [A-Z][a-z]+\.  A shock of energy courses through your body as the mist seeps into [A-Z][a-z&apos;]+ chest and life is slowly returned to (?:his|her) body\.$|^Crouching beside the prone form of [A-Z][a-z]+, you softly issue the last syllable of your chant\.  Breathing deeply, you take in the scents around you and let the feel of your surroundings infuse you\.  With only your gaze, you track the area and recreate the circumstances of [A-Z][a-z&apos;]+ within your mind\.  Touching [A-Z][a-z]+, you follow the lines of the web that holds (?:his|her) soul in place and force it back into (?:his|her) body\.  Raw energy courses through you and you feel your sense of justice and vengeance filling [A-Z][a-z]+ with life\.$|^Murmuring softly, you call upon your connection with the Destroyer,? and feel your words twist into an alien, spidery chant\.  Dark shadows laced with crimson swirl before your eyes and at your forceful command sink into the chest of [A-Z][a-z]+\.  The transference of energy is swift and immediate as you bind [A-Z][a-z]+ back into (?:his|her) body\.$|^Rich and lively, the scent of wild flowers suddenly fills the air as you finish your chant, and you feel alive with the energy of spring\.  With renewal at your fingertips, you gently touch [A-Z][a-z]+ on the brow and revel in the sweet rush of energy that passes through you into (?:him|her|his)\.$|^Breathing slowly, you extend your senses towards the world around you and draw into you the very essence of nature\.  You shift your gaze towards [A-z][a-z]+ and carefully release the energy you&apos;ve drawn into yourself towards (?:him|her)\.  A rush of energy briefly flows between the two of you as you feel life slowly return to (?:him|her)\.$|^Your surroundings grow dim\.\.\.you lapse into a state of awareness only, unable to do anything\.\.\.$|^Murmuring softly, a mournful chant slips from your lips and you feel welts appear upon your wrists\.  Dipping them briefly, you smear the crimson liquid the leaks from these sudden wounds in a thin line down [A-Z][a-z&apos;]+ face\.  Tingling with each second that your skin touches (?:his|hers), you feel the transference of your raw energy pass into [A-Z][a-z]+ and momentarily reel with the pain of its release\.  Slowly, the wounds on your wrists heal, though a lingering throb remains\.$|^Emptying all breathe from your body, you slowly still yourself and close your eyes\.  You reach out with all of your senses and feel a film shift across your vision\.  Opening your eyes, you gaze through a white haze and find images of [A-Z][a-z]+ floating above his prone form\.  Acts of [A-Z][a-z]&apos;s? past, present, and future play out before your clouded vision\.  With conviction and faith, you pluck a future image of [A-Z][a-z]+ from the air and coax (?:he|she|his|her) back into (?:he|she|his|her) body\.  Slowly, the film slips from your eyes and images fade away\.$|^Thin at first, a fine layer of rime tickles your hands and fingertips\.  The hoarfrost smoothly glides between you and [A-Z][a-z]+, turning to a light powder as it traverses the space\.  The white substance clings to [A-Z][a-z]+&apos;s? eyelashes and cheeks for a moment before it becomes charged with spiritual power, then it slowly melts away\.$|^As you begin to chant,? you notice the scent of dry, dusty parchment and feel a cool mist cling to your skin somewhere near your feet\.  You sense the ethereal tendrils of the mist as they coil about your body and notice that the world turns to a yellowish hue as the mist settles about your head\.  Focusing on [A-Z][a-z]+, you feel the transfer of energy pass between you as you return (?:him|her) to life\.$|^Wrapped in an aura of chill, you close your eyes and softly begin to chant\.  As the cold air that surrounds you condenses you feel it slowly ripple outward in waves that turn the breath of those nearby into a fine mist\.  This mist swiftly moves to encompass you and you feel a pair of wings arc over your back\.  With the last words of your chant, you open your eyes and watch as foggy wings rise above you and gently brush against [A-Z][a-z]+\.  As they dissipate in a cold rush against [A-Z][a-z]+, you feel a surge of power spill forth from you and into (?:him|her)\.$|^As .*? begins to chant, your spirit is drawn closer to your body by the scent of dusty, dry parchment\.  Topaz tendrils coil about .*?, and you feel an ancient presence demand that you return to your body\.  All at once .*? focuses upon you and you feel a surge of energy bind you back into your now-living body\.$/
-					# raise dead stun
-					if window = countdown_handler['stunned']
-						temp_stun_end = Time.now.to_f - $server_time_offset.to_f + 30.6
-						window.end_time = temp_stun_end
-						window.update
-						need_update = true
-						Thread.new {
-							while (countdown_handler['stunned'].end_time == temp_stun_end) and (countdown_handler['stunned'].value > 0)
-								sleep 0.15
-								if countdown_handler['stunned'].update
-									command_window.noutrefresh
-									Curses.doupdate
-								end
-							end
-						}
-					end
-				elsif line =~ /^Just as you think the falling will never end, you crash through an ethereal barrier which bursts into a dazzling kaleidoscope of color!  Your sensation of falling turns to dizziness and you feel unusually heavy for a moment\.  Everything seems to stop for a prolonged second and then WHUMP!!!/
-					# Shadow Valley exit stun
-					if window = countdown_handler['stunned']
-						temp_stun_end = Time.now.to_f - $server_time_offset.to_f + 16.2
-						window.end_time = temp_stun_end
-						window.update
-						need_update = true
-						Thread.new {
-							while (countdown_handler['stunned'].end_time == temp_stun_end) and (countdown_handler['stunned'].value > 0)
-								sleep 0.15
-								if countdown_handler['stunned'].update
-									command_window.noutrefresh
-									Curses.doupdate
-								end
-							end
-						}
-					end
-				elsif line =~ /^You have.*?(?:case of uncontrollable convulsions|case of sporadic convulsions|strange case of muscle twitching)/
-					# nsys wound will be correctly set by xml, dont set the scar using health verb output
-					skip_nsys = true
-				else
-					if skip_nsys
-						skip_nsys = false
-					elsif window = indicator_handler['nsys']
-						if line =~ /^You have.*? very difficult time with muscle control/
-							if window.update(3)
-								need_update = true
-							end
-						elsif line =~ /^You have.*? constant muscle spasms/
-							if window.update(2)
-								need_update = true
-							end
-						elsif line =~ /^You have.*? developed slurred speech/
-							if window.update(1)
-								need_update = true
-							end
-						end
-					end
-				end
-
-#				unless line.empty?
-#					xml_list.push [ (multiline.length + line.length), '<br/>' ]
-#				end
-				if in_stream
-					multiline.concat(line)
-					next
-				else
-					line = multiline.concat(line)
-					multiline = String.new
-				end
-				if open_style
-					h = open_style.dup
-					h[:end] = line.length
-					line_colors.push(h)
-					open_style[:start] = 0
-				end
-				# fixme: highlighting streams that won't even be shown
-				HIGHLIGHT.each_pair { |regex,colors|
-					pos = 0
-					while (match_data = line.match(regex, pos))
-						h = {
-							:start => match_data.begin(0),
-							:end => match_data.end(0),
-							:fg => colors[0],
-							:bg => colors[1],
-						}
-						line_colors.push(h)
-						pos = match_data.end(0)
-					end
-				}
-				if current_stream
-					unless line.empty?
-						if window = stream_handler[current_stream]
-							if current_stream == 'death'
-								# fixme: has been vaporized!
-								# fixme: ~ off to a rough start
-								if line =~ /^\s\*\s(The death cry of )?([A-Z][a-z]+) (?:just bit the dust!|echoes in your mind!)/
-									front_count = 3
-									front_count += 17 if $1
-									name = $2
-									line = "#{name} #{Time.now.strftime('%l:%M%P').sub(/^0/, '')}"
-									line_colors.each { |h|
-										h[:start] -= front_count
-										h[:end] = [ h[:end], name.length ].min
-									}
-									line_colors.delete_if { |h| h[:start] >= h[:end] }
-									h = {
-										:start => (name.length+1),
-										:end => line.length,
-										:fg => 'ff0000',
-									}
-									line_colors.push(h)
-								end
-							elsif current_stream == 'logons'
-								foo = { 'joins the adventure.' => '007700', 'returns home from a hard day of adventuring.' => '777700', 'has disconnected.' => 'aa7733' }
-								if line =~ /^\s\*\s([A-Z][a-z]+) (#{foo.keys.join('|')})/
-									name = $1
-									logon_type = $2
-									line = "#{name} #{Time.now.strftime('%l:%M%P').sub(/^0/, '')}"
-									line_colors.each { |h|
-										h[:start] -= 3
-										h[:end] = [ h[:end], name.length ].min
-									}
-									line_colors.delete_if { |h| h[:start] >= h[:end] }
-									h = {
-										:start => (name.length+1),
-										:end => line.length,
-										:fg => foo[logon_type],
-									}
-									line_colors.push(h)
-								end
-							end
-							unless line =~ /^\[server\]: "(?:kill|connect)/
-								window.add_string(line, line_colors)
-								need_update = true
-							end
-						elsif current_stream =~ /^(?:death|logons|thoughts|voln|familiar)$/
-							if window = stream_handler['main']
-								# fixme: add color
-								unless line.empty?
-									if need_prompt
-										need_prompt = false
-										add_prompt(window, prompt_text)
-									end
-									window.add_string(line, line_colors)
-									need_update = true
-								end
-							end
-						else
-#							stream_handler['main'].add_string "#{current_stream}: #{line.inspect}"
-						end
-					end
-					current_stream = nil
-				else
-					unless line.empty?
-						if window = stream_handler['main']
-							if need_prompt
-								need_prompt = false
-								add_prompt(window, prompt_text)
-							end
-							window.add_string(line, line_colors)
-							need_update = true
-						end
-					end
-				end
-				line_colors = Array.new
-				open_monsterbold.clear
-				open_preset.clear
-				open_color.clear
+				handle_game_text.call(line)
 			end
 			#
 			# delay screen update if there are more game lines waiting
