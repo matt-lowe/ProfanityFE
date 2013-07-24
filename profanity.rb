@@ -1326,7 +1326,6 @@ Thread.new {
 		open_style = nil
 		open_color = Array.new
 		current_stream = nil
-		in_stream = false
 
 		handle_game_text = proc { |text|
 
@@ -1425,20 +1424,29 @@ Thread.new {
 				line_colors.push(h)
 				open_style[:start] = 0
 			end
-			# fixme: highlighting streams that won't even be shown
-			HIGHLIGHT.each_pair { |regex,colors|
-				pos = 0
-				while (match_data = text.match(regex, pos))
-					h = {
-						:start => match_data.begin(0),
-						:end => match_data.end(0),
-						:fg => colors[0],
-						:bg => colors[1],
-					}
-					line_colors.push(h)
-					pos = match_data.end(0)
-				end
-			}
+			for oc in open_color
+				ocd = oc.dup
+				ocd[:end] = text.length
+				line_colors.push(ocd)
+				oc[:start] = 0
+			end
+
+			if current_stream.nil? or stream_handler[current_stream] or (current_stream =~ /^(?:death|logons|thoughts|voln|familiar)$/)
+				HIGHLIGHT.each_pair { |regex,colors|
+					pos = 0
+					while (match_data = text.match(regex, pos))
+						h = {
+							:start => match_data.begin(0),
+							:end => match_data.end(0),
+							:fg => colors[0],
+							:bg => colors[1],
+						}
+						line_colors.push(h)
+						pos = match_data.end(0)
+					end
+				}
+			end
+
 			if current_stream
 				unless text.empty?
 					if current_stream == 'thoughts'
@@ -1521,7 +1529,7 @@ Thread.new {
 			line_colors = Array.new
 			open_monsterbold.clear
 			open_preset.clear
-			open_color.clear
+			# open_color.clear
 		}
 
 		while (line = server.gets)
@@ -1691,12 +1699,10 @@ Thread.new {
 						game_text = line.slice!(0, start_pos)
 						handle_game_text.call(game_text)
 						current_stream = new_stream
-						in_stream = true
 					elsif xml =~ /^<popStream/ or xml == '</component>'
 						game_text = line.slice!(0, start_pos)
 						handle_game_text.call(game_text)
 						current_stream = nil
-						in_stream = false
 					elsif xml =~ /^<progressBar/
 						nil
 					elsif xml =~ /^<(?:dialogdata|a|\/a|d|\/d|\/?component|label|skin|output)/
