@@ -73,9 +73,21 @@ class TextWindow < Curses::Window
 			else
 				# shortest length highlight takes precedence when multiple highlights cover the same substring
 				# fixme: allow multiple highlights on a substring when one specifies fg and the other specifies bg
-				color = nil
-				color_list.each { |h| color = h if color.nil? or ((h[:end] - h[:start]) < (color[:end] - color[:start])) }
-				attron(color_pair(get_color_pair_id(color[:fg], color[:bg]))|Curses::A_NORMAL) {
+				fg_color = nil
+				color_list.each { |h| fg_color = h if h[:fg] and (fg_color.nil? or ((h[:end] - h[:start]) < (fg_color[:end] - fg_color[:start]))) }
+				if fg_color
+					fg = fg_color[:fg]
+				else
+					fg = nil
+				end
+				bg_color = nil
+				color_list.each { |h| bg_color = h if h[:bg] and (bg_color.nil? or ((h[:end] - h[:start]) < (bg_color[:end] - bg_color[:start]))) }
+				if bg_color
+					bg = bg_color[:bg]
+				else
+					bg = nil
+				end
+				attron(color_pair(get_color_pair_id(fg, bg))|Curses::A_NORMAL) {
 					addstr str
 				}
 			end
@@ -468,6 +480,9 @@ unless File.exists?(SETTINGS_FILENAME)
 	<preset id='speech' fg='66ff66'/>
 	<preset id='roomName' fg='ffffff'/>
 	<preset id='monsterbold' fg='d2bc2a'/>
+	<preset id='familiar' bg='00001a'/>
+	<preset id='thoughts' bg='001a00'/>
+	<preset id='voln' bg='001a00'/>
 	<key id='alt'>
 		<key id='f' macro='something'/>
 	</key>
@@ -1447,8 +1462,8 @@ Thread.new {
 				}
 			end
 
-			if current_stream
-				unless text.empty?
+			unless text.empty?
+				if current_stream
 					if current_stream == 'thoughts'
 						if text =~ /^\[.+?\]\-[A-z]+\:[A-Z][a-z]+\: "|^\[server\]\: /
 							current_stream = 'lnet'
@@ -1500,7 +1515,9 @@ Thread.new {
 						end
 					elsif current_stream =~ /^(?:death|logons|thoughts|voln|familiar)$/
 						if window = stream_handler['main']
-							# fixme: add color
+							if PRESET[current_stream]
+								line_colors.push(:start => 0, :fg => PRESET[current_stream][0], :bg => PRESET[current_stream][1], :end => text.length)
+							end
 							unless text.empty?
 								if need_prompt
 									need_prompt = false
@@ -1511,11 +1528,9 @@ Thread.new {
 							end
 						end
 					else
-#						stream_handler['main'].add_string "#{current_stream}: #{text.inspect}"
+						# stream_handler['main'].add_string "#{current_stream}: #{text.inspect}"
 					end
-				end
-			else
-				unless text.empty?
+				else
 					if window = stream_handler['main']
 						if need_prompt
 							need_prompt = false
@@ -1694,7 +1709,7 @@ Thread.new {
 								open_style[:bg] = PRESET[$2][1]
 							end
 						end
-					elsif xml =~ /^<(?:pushStream|component) id=("|')(.*?)\1\/?>$/
+					elsif xml =~ /^<(?:pushStream|component) id=("|')(.*?)\1[^>]*\/?>$/
 						new_stream = $2
 						game_text = line.slice!(0, start_pos)
 						handle_game_text.call(game_text)
