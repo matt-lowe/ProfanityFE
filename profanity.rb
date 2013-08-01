@@ -357,7 +357,13 @@ class IndicatorWindow < Curses::Window
 		@@list
 	end
 
-	attr_accessor :fg, :bg, :label, :layout
+	attr_accessor :fg, :bg, :layout
+	attr_reader :label
+
+	def label=(str)
+		@label = str
+		redraw
+	end
 
 	def initialize(*args)
 		@fg = [ '444444', 'ffff00' ]
@@ -371,20 +377,25 @@ class IndicatorWindow < Curses::Window
 		if new_value == @value
 			false
 		else
-			setpos(0,0)
-			if new_value
-				if new_value.class == Fixnum
-					attron(color_pair(get_color_pair_id(@fg[new_value], @bg[new_value]))|Curses::A_NORMAL) { addstr @label }
-				else
-					attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) { addstr @label }
-				end
-			else
-				attron(color_pair(get_color_pair_id(@fg[0], @bg[0]))|Curses::A_NORMAL) { addstr @label }
-			end
-			noutrefresh
 			@value = new_value
+			redraw
 			true
 		end
+	end
+
+private
+	def redraw()
+		setpos(0,0)
+		if @value
+			if @value.class == Fixnum
+				attron(color_pair(get_color_pair_id(@fg[@value], @bg[@value]))|Curses::A_NORMAL) { addstr @label }
+			else
+				attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) { addstr @label }
+			end
+		else
+			attron(color_pair(get_color_pair_id(@fg[0], @bg[0]))|Curses::A_NORMAL) { addstr @label }
+		end
+		noutrefresh
 	end
 end
 
@@ -516,7 +527,7 @@ unless File.exists?(SETTINGS_FILENAME)
 		<window class='text' top='0' left='0' height='6' width='cols' value='lnet,thoughts,voln' buffer-size='1000' />
 		<window class='text' top='7' left='0' width='11' height='lines-31' value='death,logons' buffer-size='500' />
 
-		<window class='indicator' top='lines-1' left='12' height='1' width='1' label='&gt;' fg='444444,44444'/>
+		<window class='indicator' top='lines-1' left='12' height='1' width='1' label='&gt;' value='prompt' fg='444444,44444'/>
 		<window class='command' top='lines-1' left='13' width='cols-13' height='1' />
 
 		<window class='progress' top='lines-11' left='0' width='11' height='1' label='stance:' value='stance' bg='290055'/>
@@ -1572,6 +1583,16 @@ Thread.new {
 							need_prompt = false
 							prompt_text = new_prompt_text
 							add_prompt(stream_handler['main'], new_prompt_text)
+							if prompt_window = indicator_handler["prompt"]
+								init_prompt_height, init_prompt_width = fix_layout_number.call(prompt_window.layout[0]), fix_layout_number.call(prompt_window.layout[1])
+								new_prompt_width = new_prompt_text.length
+								prompt_window.resize(init_prompt_height, new_prompt_width)
+								prompt_width_diff = new_prompt_width - init_prompt_width
+								command_window.resize(fix_layout_number.call(command_window_layout[0]), fix_layout_number.call(command_window_layout[1]) - prompt_width_diff)
+								ctop, cleft = fix_layout_number.call(command_window_layout[2]), fix_layout_number.call(command_window_layout[3]) + prompt_width_diff
+								command_window.move(ctop, cleft)
+								prompt_window.label = new_prompt_text
+							end
 						else
 							need_prompt = true
 						end
