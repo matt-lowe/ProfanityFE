@@ -455,6 +455,9 @@ for arg in ARGV
 	end
 end
 
+def log(value)
+		File.open('profanity.log', 'a') { |f| f.puts value }
+end
 
 PORT ||= 8000
 DEFAULT_COLOR_ID ||= 7
@@ -1066,6 +1069,19 @@ key_action['cursor_backspace'] = proc {
 	end
 }
 
+class String
+  def alnum?
+    !!match(/^[[:alnum:]]+$/)
+  end
+  def punct?
+    !!match(/^[[:punct:]]+$/)
+  end
+	def space?
+    !!match(/^[[:space:]]+$/)
+	end
+
+end
+
 key_action['cursor_delete'] = proc {
 	if (command_buffer.length > 0) and (command_buffer_pos < command_buffer.length)
 		if command_buffer_pos == 0
@@ -1081,6 +1097,41 @@ key_action['cursor_delete'] = proc {
 		end
 		command_window.noutrefresh
 		Curses.doupdate
+	end
+}
+
+
+key_action['cursor_backspace_word'] = proc {
+	num_deleted = 0
+	deleted_alnum = false
+	deleted_nonspace = false
+	while command_buffer_pos > 0 do
+		next_char = command_buffer[command_buffer_pos - 1]
+		if num_deleted == 0 || (!deleted_alnum && next_char.punct?) || (!deleted_nonspace && next_char.space?) || next_char.alnum?
+			deleted_alnum = deleted_alnum || next_char.alnum?
+			deleted_nonspace = !next_char.space?
+			num_deleted += 1
+			key_action['cursor_backspace'].call
+		else
+			break
+		end
+	end
+}
+
+key_action['cursor_delete_word'] = proc {
+	num_deleted = 0
+	deleted_alnum = false
+	deleted_nonspace = false
+	while command_buffer_pos < command_buffer.length do
+		next_char = command_buffer[command_buffer_pos]
+		if num_deleted == 0 || (!deleted_alnum && next_char.punct?) || (!deleted_nonspace && next_char.space?) || next_char.alnum?
+			deleted_alnum = deleted_alnum || next_char.alnum?
+			deleted_nonspace = !next_char.space?
+			num_deleted += 1
+			key_action['cursor_delete'].call
+		else
+			break
+		end
 	end
 }
 
