@@ -1070,16 +1070,18 @@ key_action['cursor_backspace'] = proc {
 }
 
 class String
-  def alnum?
-    !!match(/^[[:alnum:]]+$/)
-  end
-  def punct?
-    !!match(/^[[:punct:]]+$/)
-  end
-	def space?
-    !!match(/^[[:space:]]+$/)
+	def alnum?
+		!!match(/^[[:alnum:]]+$/)
 	end
-
+	def digits?
+		!!match(/^[[:digit:]]+$/)
+	end
+	def punct?
+		!!match(/^[[:punct:]]+$/)
+	end
+	def space?
+		!!match(/^[[:space:]]+$/)
+	end
 end
 
 key_action['cursor_delete'] = proc {
@@ -1247,7 +1249,8 @@ key_action['send_command'] = proc {
 	command_window.noutrefresh
 	Curses.doupdate
 	command_history_pos = 0
-	if (cmd.length >= min_cmd_length_for_history) and (cmd != command_history[1])
+	# Remember all digit commands because they are likely spells for voodoo.lic
+	if (cmd.length >= min_cmd_length_for_history || cmd.digits?) and (cmd != command_history[1])
 		if command_history[0].nil? or command_history[0].empty?
 			command_history[0] = cmd
 		else
