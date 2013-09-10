@@ -459,11 +459,18 @@ def log(value)
 		File.open('profanity.log', 'a') { |f| f.puts value }
 end
 
-PORT ||= 8000
-DEFAULT_COLOR_ID ||= 7
-DEFAULT_BACKGROUND_COLOR_ID ||= 0
-SETTINGS_FILENAME ||= File.expand_path('~/.profanity.xml')
-
+unless defined?(PORT)
+	PORT = 8000
+end
+unless defined?(DEFAULT_COLOR_ID)
+	DEFAULT_COLOR_ID = 7
+end
+unless defined?(DEFAULT_BACKGROUND_COLOR_ID)
+	DEFAULT_BACKGROUND_COLOR_ID = 0
+end
+unless defined?(SETTINGS_FILENAME)
+	SETTINGS_FILENAME = File.expand_path('~/.profanity.xml')
+end
 unless defined?(CUSTOM_COLORS)
 	CUSTOM_COLORS = Curses.can_change_color?
 end
