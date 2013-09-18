@@ -419,6 +419,11 @@ progress_handler = Hash.new
 countdown_handler = Hash.new
 command_window = nil
 command_window_layout = nil
+# We need a mutex for the settings because highlights can be accessed during a
+# reload.  For now, it is just used to protect access to HIGHLIGHT, but if we
+# ever support reloading other settings in the future it will have to protect
+# those.
+SETTINGS_LOCK = Mutex.new
 HIGHLIGHT = Hash.new
 PRESET = Hash.new
 LAYOUT = Hash.new
@@ -845,6 +850,72 @@ load_layout = proc { |layout_id|
 		end
 		Curses.doupdate
 	end
+}
+
+setup_key = proc { |xml,binding|
+	if key = xml.attributes['id']
+		if key =~ /^[0-9]+$/
+			key = key.to_i
+		elsif (key.class) == String and (key.length == 1)
+			nil
+		else
+			key = key_name[key]
+		end
+		if key
+			if macro = xml.attributes['macro']
+				binding[key] = proc { do_macro.call(macro) }
+			elsif xml.attributes['action'] and action = key_action[xml.attributes['action']]
+				binding[key] = action
+			else
+				binding[key] ||= Hash.new
+				xml.elements.each { |e|
+					setup_key.call(e, binding[key])
+				}
+			end
+		end
+	end
+}
+
+load_settings_file = proc { |reload|
+	SETTINGS_LOCK.synchronize {
+		begin
+			HIGHLIGHT.clear()
+			File.open(SETTINGS_FILENAME) { |file|
+				xml_doc = REXML::Document.new(file)
+				xml_root = xml_doc.root
+				xml_root.elements.each { |e|
+					if e.name == 'highlight'
+						begin
+							r = Regexp.new(e.text)
+						rescue
+							r = nil
+							$stderr.puts e.to_s
+							$stderr.puts $!
+						end
+						if r
+							HIGHLIGHT[r] = [ e.attributes['fg'], e.attributes['bg'] ]
+						end
+					end
+					# These are things that we ignore if we're doing a reload of the settings file
+					if !reload
+						if e.name == 'preset'
+							PRESET[e.attributes['id']] = [ e.attributes['fg'], e.attributes['bg'] ]
+						elsif (e.name == 'layout') and (layout_id = e.attributes['id'])
+							LAYOUT[layout_id] = e
+						elsif e.name == 'key'
+							setup_key.call(e, key_binding)
+						end
+					end
+				}
+			}
+		rescue
+			$stdout.puts $!
+			$stdout.puts $!.backtrace[0..1]
+			log $!
+			log $!.backtrace[0..1]
+
+		end
+	}
 }
 
 command_window_put_ch = proc { |ch|
@@ -1277,6 +1348,8 @@ key_action['send_command'] = proc {
 		end
 	elsif cmd =~ /^\.resync/i
 		skip_server_time_offset = false
+	elsif cmd =~ /^\.reload/i
+		load_settings_file.call(true)
 	elsif cmd =~ /^\.arrow/i
 		key_action['switch_arrow_mode'].call
 	elsif cmd =~ /^\.e (.*)/
@@ -1342,61 +1415,8 @@ key_action['send_second_last_command'] = proc {
 	end
 }
 
-setup_key = proc { |xml,binding|
-	if key = xml.attributes['id']
-		if key =~ /^[0-9]+$/
-			key = key.to_i
-		elsif (key.class) == String and (key.length == 1)
-			nil
-		else
-			key = key_name[key]
-		end
-		if key
-			if macro = xml.attributes['macro']
-				binding[key] = proc { do_macro.call(macro) }
-			elsif xml.attributes['action'] and action = key_action[xml.attributes['action']]
-				binding[key] = action
-			else
-				binding[key] ||= Hash.new
-				xml.elements.each { |e|
-					setup_key.call(e, binding[key])
-				}
-			end
-		end
-	end
-}
 
-
-begin
-	File.open(SETTINGS_FILENAME) { |file|
-		xml_doc = REXML::Document.new(file)
-		xml_root = xml_doc.root
-		xml_root.elements.each { |e|
-			if e.name == 'highlight'
-				begin
-					r = Regexp.new(e.text)
-				rescue
-					r = nil
-					$stderr.puts e.to_s
-					$stderr.puts $!
-				end
-				if r
-					HIGHLIGHT[r] = [ e.attributes['fg'], e.attributes['bg'] ]
-				end
-			elsif e.name == 'preset'
-				PRESET[e.attributes['id']] = [ e.attributes['fg'], e.attributes['bg'] ]
-			elsif (e.name == 'layout') and (layout_id = e.attributes['id'])
-				LAYOUT[layout_id] = e
-			elsif e.name == 'key'
-				setup_key.call(e, key_binding)
-			end
-		}
-	}
-rescue
-	$stdout.puts $!
-	$stdout.puts $!.backtrace[0..1]
-end
-
+load_settings_file.call(false)
 load_layout.call('default')
 
 server = TCPSocket.open('127.0.0.1', PORT)
@@ -1519,18 +1539,20 @@ Thread.new {
 			end
 
 			if current_stream.nil? or stream_handler[current_stream] or (current_stream =~ /^(?:death|logons|thoughts|voln|familiar)$/)
-				HIGHLIGHT.each_pair { |regex,colors|
-					pos = 0
-					while (match_data = text.match(regex, pos))
-						h = {
-							:start => match_data.begin(0),
-							:end => match_data.end(0),
-							:fg => colors[0],
-							:bg => colors[1],
-						}
-						line_colors.push(h)
-						pos = match_data.end(0)
-					end
+				SETTINGS_LOCK.synchronize {
+					HIGHLIGHT.each_pair { |regex,colors|
+						pos = 0
+						while (match_data = text.match(regex, pos))
+							h = {
+								:start => match_data.begin(0),
+								:end => match_data.end(0),
+								:fg => colors[0],
+								:bg => colors[1],
+							}
+							line_colors.push(h)
+							pos = match_data.end(0)
+						end
+					}
 				}
 			end
 
