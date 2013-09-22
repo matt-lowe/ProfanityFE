@@ -26,6 +26,7 @@
 
 $version = 0.4
 
+require 'thread'
 require 'socket'
 require 'rexml/document'
 require 'curses'
