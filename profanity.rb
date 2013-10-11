@@ -20,7 +20,7 @@
 	with this program; if not, write to the Free Software Foundation, Inc.,
 	51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-	tillmen@lichproject.org
+	matt@lichproject.org
 
 =end
 
@@ -230,52 +230,56 @@ class ProgressWindow < Curses::Window
 		@label = String.new
 		@fg = [ ]
 		@bg = [ '0000aa', '000055' ]
-		@value = nil
-		@max_value = nil
+		@value = 0
+		@max_value = 100
 		@@list.push(self)
 		super(*args)
 	end
-	def update(new_value, new_max_value)
+	def update(new_value, new_max_value=nil)
+		new_max_value ||= @max_value
 		if (new_value == @value) and (new_max_value == @max_value)
 			false
 		else
-			str = "#{@label}#{new_value.to_s.rjust(self.maxx - @label.length)}"
-			percent = [[(new_value/new_max_value.to_f), 0.to_f].max, 1].min
-			if (new_value == 0) and (fg[3] or bg[3])
-				setpos(0, 0)
-				attron(color_pair(get_color_pair_id(@fg[3], @bg[3]))|Curses::A_NORMAL) {
-					addstr str
-				}
-			else
-				left_str = str[0,(str.length*percent).floor].to_s
-				if (@fg[1] or @bg[1]) and (left_str.length < str.length) and (((left_str.length+0.5)*(1/str.length.to_f)) < percent)
-					middle_str = str[left_str.length,1].to_s
-				else
-					middle_str = ''
-				end
-				right_str = str[(left_str.length + middle_str.length),(@label.length + (self.maxx - @label.length))].to_s
-				setpos(0, 0)
-				if left_str.length > 0
-					attron(color_pair(get_color_pair_id(@fg[0], @bg[0]))|Curses::A_NORMAL) {
-						addstr left_str
-					}
-				end
-				if middle_str.length > 0
-					attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) {
-						addstr middle_str
-					}
-				end
-				if right_str.length > 0
-					attron(color_pair(get_color_pair_id(@fg[2], @bg[2]))|Curses::A_NORMAL) {
-						addstr right_str
-					}
-				end
-			end
-			noutrefresh
 			@value = new_value
 			@max_value = new_max_value
-			true
+			redraw
 		end
+	end
+	def redraw
+		str = "#{@label}#{@value.to_s.rjust(self.maxx - @label.length)}"
+		percent = [[(@value/@max_value.to_f), 0.to_f].max, 1].min
+		if (@value == 0) and (fg[3] or bg[3])
+			setpos(0, 0)
+			attron(color_pair(get_color_pair_id(@fg[3], @bg[3]))|Curses::A_NORMAL) {
+				addstr str
+			}
+		else
+			left_str = str[0,(str.length*percent).floor].to_s
+			if (@fg[1] or @bg[1]) and (left_str.length < str.length) and (((left_str.length+0.5)*(1/str.length.to_f)) < percent)
+				middle_str = str[left_str.length,1].to_s
+			else
+				middle_str = ''
+			end
+			right_str = str[(left_str.length + middle_str.length),(@label.length + (self.maxx - @label.length))].to_s
+			setpos(0, 0)
+			if left_str.length > 0
+				attron(color_pair(get_color_pair_id(@fg[0], @bg[0]))|Curses::A_NORMAL) {
+					addstr left_str
+				}
+			end
+			if middle_str.length > 0
+				attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) {
+					addstr middle_str
+				}
+			end
+			if right_str.length > 0
+				attron(color_pair(get_color_pair_id(@fg[2], @bg[2]))|Curses::A_NORMAL) {
+					addstr right_str
+				}
+			end
+		end
+		noutrefresh
+		true
 	end
 end
 
@@ -359,7 +363,7 @@ class IndicatorWindow < Curses::Window
 	end
 
 	attr_accessor :fg, :bg, :layout
-	attr_reader :label
+	attr_reader :label, :value
 
 	def label=(str)
 		@label = str
@@ -380,12 +384,10 @@ class IndicatorWindow < Curses::Window
 		else
 			@value = new_value
 			redraw
-			true
 		end
 	end
 
-private
-	def redraw()
+	def redraw
 		setpos(0,0)
 		if @value
 			if @value.class == Fixnum
@@ -397,6 +399,7 @@ private
 			attron(color_pair(get_color_pair_id(@fg[0], @bg[0]))|Curses::A_NORMAL) { addstr @label }
 		end
 		noutrefresh
+		true
 	end
 end
 
@@ -787,12 +790,31 @@ fix_layout_number = proc { |str|
 
 load_layout = proc { |layout_id|
 	if xml = LAYOUT[layout_id]
+		old_windows = IndicatorWindow.list | TextWindow.list | CountdownWindow.list | ProgressWindow.list
+
+		previous_indicator_handler = indicator_handler
+		indicator_handler = Hash.new
+
+		previous_stream_handler = stream_handler
+		stream_handler = Hash.new
+
+		previous_progress_handler = progress_handler
+		progress_handler = Hash.new
+
+		previous_countdown_handler = countdown_handler
+		progress_handler = Hash.new
+
 		xml.elements.each { |e|
 			if e.name == 'window'
 				height, width, top, left = fix_layout_number.call(e.attributes['height']), fix_layout_number.call(e.attributes['width']), fix_layout_number.call(e.attributes['top']), fix_layout_number.call(e.attributes['left'])
 				if (height > 0) and (width > 0) and (top >= 0) and (left >= 0) and (top < Curses.lines) and (left < Curses.cols)
 					if e.attributes['class'] == 'indicator'
-						window = IndicatorWindow.new(height, width, top, left)
+						if e.attributes['value'] and (window = previous_indicator_handler[e.attributes['value']])
+							previous_indicator_handler[e.attributes['value']] = nil
+							old_windows.delete(window)
+						else
+							window = IndicatorWindow.new(height, width, top, left)
+						end
 						window.layout = [ e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left'] ]
 						window.scrollok(false)
 						window.label = e.attributes['label'] if e.attributes['label']
@@ -801,21 +823,30 @@ load_layout = proc { |layout_id|
 						if e.attributes['value']
 							indicator_handler[e.attributes['value']] = window
 						end
-						window.update(false)
+						window.redraw
 					elsif e.attributes['class'] == 'text'
 						if width > 1
-							window = TextWindow.new(height, width - 1, top, left)
+							if e.attributes['value'] and (window = previous_stream_handler[previous_stream_handler.keys.find { |key| e.attributes['value'].split(',').include?(key) }])
+								previous_stream_handler[e.attributes['value']] = nil
+								old_windows.delete(window)
+							else
+								window = TextWindow.new(height, width - 1, top, left)
+								window.scrollbar = Curses::Window.new(window.maxy, 1, window.begy, window.begx + window.maxx)
+							end
 							window.layout = [ e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left'] ]
 							window.scrollok(true)
 							window.max_buffer_size = e.attributes['buffer-size'] || 1000
-							window.scrollbar = Curses::Window.new(window.maxy, 1, window.begy, window.begx + window.maxx)
 							e.attributes['value'].split(',').each { |str|
 								stream_handler[str] = window
 							}
-							window.maxy.times { window.add_string "\n" }
 						end
 					elsif e.attributes['class'] == 'countdown'
-						window = CountdownWindow.new(height, width, top, left)
+						if e.attributes['value'] and (window = previous_countdown_handler[e.attributes['value']])
+							previous_countdown_handler[e.attributes['value']] = nil
+							old_windows.delete(window)
+						else
+							window = CountdownWindow.new(height, width, top, left)
+						end
 						window.layout = [ e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left'] ]
 						window.scrollok(false)
 						window.label = e.attributes['label'] if e.attributes['label']
@@ -824,10 +855,14 @@ load_layout = proc { |layout_id|
 						if e.attributes['value']
 							countdown_handler[e.attributes['value']] = window
 						end
-						window.end_time = 0
 						window.update
 					elsif e.attributes['class'] == 'progress'
-						window = ProgressWindow.new(height, width, top, left)
+						if e.attributes['value'] and (window = previous_progress_handler[e.attributes['value']])
+							previous_progress_handler[e.attributes['value']] = nil
+							old_windows.delete(window)
+						else
+							window = ProgressWindow.new(height, width, top, left)
+						end
 						window.layout = [ e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left'] ]
 						window.scrollok(false)
 						window.label = e.attributes['label'] if e.attributes['label']
@@ -836,9 +871,11 @@ load_layout = proc { |layout_id|
 						if e.attributes['value']
 							progress_handler[e.attributes['value']] = window
 						end
-						window.update(0, 100)
+						window.redraw
 					elsif e.attributes['class'] == 'command'
-						command_window = Curses::Window.new(height, width, top, left)
+						unless command_window
+							command_window = Curses::Window.new(height, width, top, left)
+						end
 						command_window_layout = [ e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left'] ]
 						command_window.scrollok(false)
 						command_window.keypad(true)
@@ -849,9 +886,21 @@ load_layout = proc { |layout_id|
 		if current_scroll_window = TextWindow.list[0]
 			current_scroll_window.update_scrollbar
 		end
+		for window in old_windows
+			IndicatorWindow.list.delete(window)
+			TextWindow.list.delete(window)
+			CountdownWindow.list.delete(window)
+			ProgressWindow.list.delete(window)
+			if window.class == TextWindow
+				window.scrollbar.close
+			end
+			window.close
+		end
 		Curses.doupdate
 	end
 }
+
+do_macro = nil
 
 setup_key = proc { |xml,binding|
 	if key = xml.attributes['id']
@@ -1351,6 +1400,9 @@ key_action['send_command'] = proc {
 		skip_server_time_offset = false
 	elsif cmd =~ /^\.reload/i
 		load_settings_file.call(true)
+	elsif cmd =~ /^\.layout\s+(.+)/
+		load_layout.call($1)
+		key_action['resize'].call
 	elsif cmd =~ /^\.arrow/i
 		key_action['switch_arrow_mode'].call
 	elsif cmd =~ /^\.e (.*)/
@@ -1416,9 +1468,28 @@ key_action['send_second_last_command'] = proc {
 	end
 }
 
+new_stun = proc { |seconds|
+	if window = countdown_handler['stunned']
+		temp_stun_end = Time.now.to_f - $server_time_offset.to_f + seconds.to_f
+		window.end_time = temp_stun_end
+		window.update
+		need_update = true
+		Thread.new {
+			while (countdown_handler['stunned'].end_time == temp_stun_end) and (countdown_handler['stunned'].value > 0)
+				sleep 0.15
+				if countdown_handler['stunned'].update
+					command_window.noutrefresh
+					Curses.doupdate
+				end
+			end
+		}
+	end
+}
 
 load_settings_file.call(false)
 load_layout.call('default')
+
+TextWindow.list.each { |w| w.maxy.times { w.add_string "\n" } }
 
 server = TCPSocket.open('127.0.0.1', PORT)
 
@@ -1454,55 +1525,13 @@ Thread.new {
 			if text =~ /^\[.*?\]>/
 				need_prompt = false
 			elsif text =~ /^\s*You are stunned for ([0-9]+) rounds?/
-				if window = countdown_handler['stunned']
-					temp_stun_end = Time.now.to_f - $server_time_offset.to_f + ($1.to_i * 5)
-					window.end_time = temp_stun_end
-					window.update
-					need_update = true
-					Thread.new {
-						while (countdown_handler['stunned'].end_time == temp_stun_end) and (countdown_handler['stunned'].value > 0)
-							sleep 0.15
-							if countdown_handler['stunned'].update
-								command_window.noutrefresh
-								Curses.doupdate
-							end
-						end
-					}
-				end
+				new_stun.call($1.to_i * 5)
 			elsif text =~ /^Deep and resonating, you feel the chant that falls from your lips instill within you with the strength of your faith\.  You crouch beside [A-Z][a-z]+ and gently lift (?:he|she|him|her) into your arms, your muscles swelling with the power of your deity, and cradle (?:him|her) close to your chest\.  Strength and life momentarily seep from your limbs, causing them to feel laden and heavy, and you are overcome with a sudden weakness\.  With a sigh, you are able to lay [A-Z][a-z]+ back down\.$|^Moisture beads upon your skin and you feel your eyes cloud over with the darkness of a rising storm\.  Power builds upon the air and when you utter the last syllable of your spell thunder rumbles from your lips\.  The sound ripples upon the air, and colling with [A-Z][a-z&apos;]+ prone form and a brilliant flash transfers the spiritual energy between you\.$|^Lifting your finger, you begin to chant and draw a series of conjoined circles in the air\.  Each circle turns to mist and takes on a different hue - white, blue, black, red, and green\.  As the last ring is completed, you spread your fingers and gently allow your tips to touch each color before pushing the misty creation towards [A-Z][a-z]+\.  A shock of energy courses through your body as the mist seeps into [A-Z][a-z&apos;]+ chest and life is slowly returned to (?:his|her) body\.$|^Crouching beside the prone form of [A-Z][a-z]+, you softly issue the last syllable of your chant\.  Breathing deeply, you take in the scents around you and let the feel of your surroundings infuse you\.  With only your gaze, you track the area and recreate the circumstances of [A-Z][a-z&apos;]+ within your mind\.  Touching [A-Z][a-z]+, you follow the lines of the web that holds (?:his|her) soul in place and force it back into (?:his|her) body\.  Raw energy courses through you and you feel your sense of justice and vengeance filling [A-Z][a-z]+ with life\.$|^Murmuring softly, you call upon your connection with the Destroyer,? and feel your words twist into an alien, spidery chant\.  Dark shadows laced with crimson swirl before your eyes and at your forceful command sink into the chest of [A-Z][a-z]+\.  The transference of energy is swift and immediate as you bind [A-Z][a-z]+ back into (?:his|her) body\.$|^Rich and lively, the scent of wild flowers suddenly fills the air as you finish your chant, and you feel alive with the energy of spring\.  With renewal at your fingertips, you gently touch [A-Z][a-z]+ on the brow and revel in the sweet rush of energy that passes through you into (?:him|her|his)\.$|^Breathing slowly, you extend your senses towards the world around you and draw into you the very essence of nature\.  You shift your gaze towards [A-z][a-z]+ and carefully release the energy you&apos;ve drawn into yourself towards (?:him|her)\.  A rush of energy briefly flows between the two of you as you feel life slowly return to (?:him|her)\.$|^Your surroundings grow dim\.\.\.you lapse into a state of awareness only, unable to do anything\.\.\.$|^Murmuring softly, a mournful chant slips from your lips and you feel welts appear upon your wrists\.  Dipping them briefly, you smear the crimson liquid the leaks from these sudden wounds in a thin line down [A-Z][a-z&apos;]+ face\.  Tingling with each second that your skin touches (?:his|hers), you feel the transference of your raw energy pass into [A-Z][a-z]+ and momentarily reel with the pain of its release\.  Slowly, the wounds on your wrists heal, though a lingering throb remains\.$|^Emptying all breathe from your body, you slowly still yourself and close your eyes\.  You reach out with all of your senses and feel a film shift across your vision\.  Opening your eyes, you gaze through a white haze and find images of [A-Z][a-z]+ floating above his prone form\.  Acts of [A-Z][a-z]&apos;s? past, present, and future play out before your clouded vision\.  With conviction and faith, you pluck a future image of [A-Z][a-z]+ from the air and coax (?:he|she|his|her) back into (?:he|she|his|her) body\.  Slowly, the film slips from your eyes and images fade away\.$|^Thin at first, a fine layer of rime tickles your hands and fingertips\.  The hoarfrost smoothly glides between you and [A-Z][a-z]+, turning to a light powder as it traverses the space\.  The white substance clings to [A-Z][a-z]+&apos;s? eyelashes and cheeks for a moment before it becomes charged with spiritual power, then it slowly melts away\.$|^As you begin to chant,? you notice the scent of dry, dusty parchment and feel a cool mist cling to your skin somewhere near your feet\.  You sense the ethereal tendrils of the mist as they coil about your body and notice that the world turns to a yellowish hue as the mist settles about your head\.  Focusing on [A-Z][a-z]+, you feel the transfer of energy pass between you as you return (?:him|her) to life\.$|^Wrapped in an aura of chill, you close your eyes and softly begin to chant\.  As the cold air that surrounds you condenses you feel it slowly ripple outward in waves that turn the breath of those nearby into a fine mist\.  This mist swiftly moves to encompass you and you feel a pair of wings arc over your back\.  With the last words of your chant, you open your eyes and watch as foggy wings rise above you and gently brush against [A-Z][a-z]+\.  As they dissipate in a cold rush against [A-Z][a-z]+, you feel a surge of power spill forth from you and into (?:him|her)\.$|^As .*? begins to chant, your spirit is drawn closer to your body by the scent of dusty, dry parchment\.  Topaz tendrils coil about .*?, and you feel an ancient presence demand that you return to your body\.  All at once .*? focuses upon you and you feel a surge of energy bind you back into your now-living body\.$/
 				# raise dead stun
-				if window = countdown_handler['stunned']
-					temp_stun_end = Time.now.to_f - $server_time_offset.to_f + 30.6
-					window.end_time = temp_stun_end
-					window.update
-					need_update = true
-					Thread.new {
-						while (countdown_handler['stunned'].end_time == temp_stun_end) and (countdown_handler['stunned'].value > 0)
-							sleep 0.15
-							if countdown_handler['stunned'].update
-								command_window.noutrefresh
-								Curses.doupdate
-							end
-						end
-					}
-				end
+				new_stun.call(30.6)
 			elsif text =~ /^Just as you think the falling will never end, you crash through an ethereal barrier which bursts into a dazzling kaleidoscope of color!  Your sensation of falling turns to dizziness and you feel unusually heavy for a moment\.  Everything seems to stop for a prolonged second and then WHUMP!!!/
 				# Shadow Valley exit stun
-				if window = countdown_handler['stunned']
-					temp_stun_end = Time.now.to_f - $server_time_offset.to_f + 16.2
-					window.end_time = temp_stun_end
-					window.update
-					need_update = true
-					Thread.new {
-						while (countdown_handler['stunned'].end_time == temp_stun_end) and (countdown_handler['stunned'].value > 0)
-							sleep 0.15
-							if countdown_handler['stunned'].update
-								command_window.noutrefresh
-								Curses.doupdate
-							end
-						end
-					}
-				end
+				new_stun.call(16.2)
 			elsif text =~ /^You have.*?(?:case of uncontrollable convulsions|case of sporadic convulsions|strange case of muscle twitching)/
 				# nsys wound will be correctly set by xml, dont set the scar using health verb output
 				skip_nsys = true
