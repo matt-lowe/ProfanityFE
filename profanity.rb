@@ -74,21 +74,12 @@ class TextWindow < Curses::Window
 			else
 				# shortest length highlight takes precedence when multiple highlights cover the same substring
 				# fixme: allow multiple highlights on a substring when one specifies fg and the other specifies bg
-				fg_color = nil
-				color_list.each { |h| fg_color = h if h[:fg] and (fg_color.nil? or ((h[:end] - h[:start]) < (fg_color[:end] - fg_color[:start]))) }
-				if fg_color
-					fg = fg_color[:fg]
-				else
-					fg = nil
-				end
-				bg_color = nil
-				color_list.each { |h| bg_color = h if h[:bg] and (bg_color.nil? or ((h[:end] - h[:start]) < (bg_color[:end] - bg_color[:start]))) }
-				if bg_color
-					bg = bg_color[:bg]
-				else
-					bg = nil
-				end
-				attron(color_pair(get_color_pair_id(fg, bg))|Curses::A_NORMAL) {
+				color_list = color_list.sort_by { |h| h[:end] - h[:start] }
+				#log("line: #{line}, list: #{color_list}")
+				fg = color_list.map { |h| h[:fg] }.find { |fg| !fg.nil? }
+				bg = color_list.map { |h| h[:bg] }.find { |bg| !bg.nil? }
+				ul = color_list.map { |h| h[:ul] == "true" }.find { |ul| ul }
+				attron(color_pair(get_color_pair_id(fg, bg))|(ul ? Curses::A_UNDERLINE : Curses::A_NORMAL)) {
 					addstr str
 				}
 			end
@@ -121,7 +112,11 @@ class TextWindow < Curses::Window
 			if @indent_word_wrap
 				if string[0,1] == ' '
 					string = " #{string}"
-					string_colors.each { |h| h[:end] += 1; h[:start] += 1 }
+					string_colors.each { |h|
+						h[:end] += 1;
+						# Never let the highlighting hang off the edge -- it looks weird
+						h[:start] += h[:start] == 0 ? 2 : 1
+					}
 				else
 					string = "  #{string}"
 					string_colors.each { |h| h[:end] += 2; h[:start] += 2 }
@@ -943,7 +938,7 @@ load_settings_file = proc { |reload|
 							$stderr.puts $!
 						end
 						if r
-							HIGHLIGHT[r] = [ e.attributes['fg'], e.attributes['bg'] ]
+							HIGHLIGHT[r] = [ e.attributes['fg'], e.attributes['bg'], e.attributes['ul'] ]
 						end
 					end
 					# These are things that we ignore if we're doing a reload of the settings file
@@ -1578,6 +1573,7 @@ Thread.new {
 								:end => match_data.end(0),
 								:fg => colors[0],
 								:bg => colors[1],
+								:ul => colors[2]
 							}
 							line_colors.push(h)
 							pos = match_data.end(0)
@@ -1821,11 +1817,14 @@ Thread.new {
 						if xml =~ /\sbg=('|")(.*?)\1[\s>]/
 							h[:bg] = $2.downcase
 						end
+						if xml =~ /\sul=('|")(.*?)\1[\s>]/
+							h[:ul] = $2.downcase
+						end
 						open_color.push(h)
 					elsif xml == '</color>'
 						if h = open_color.pop
 							h[:end] = start_pos
-							line_colors.push(h) if h[:fg] or h[:bg]
+							line_colors.push(h)
 						end
 					elsif xml =~ /^<style id=('|")(.*?)\1/
 						if $2.empty?
