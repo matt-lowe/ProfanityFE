@@ -1888,6 +1888,11 @@ Thread.new {
 								end
 							end
 						end
+					elsif xml =~ /^<LaunchURL src="([^"]+)"/
+						url = "\"https://www.play.net#{$1}\""
+						# assume linux if not mac
+						cmd = RUBY_PLATFORM =~ /darwin/ ? "open" : "firefox"
+						system("#{cmd} #{url}")
 					else
 						nil
 					end
