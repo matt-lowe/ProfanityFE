@@ -236,7 +236,7 @@ class ProgressWindow < Curses::Window
 			false
 		else
 			@value = new_value
-			@max_value = new_max_value
+			@max_value = [new_max_value, 1].max
 			redraw
 		end
 	end
