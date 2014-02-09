@@ -1306,6 +1306,14 @@ key_action['scroll_current_window_down_page'] = proc {
 	Curses.doupdate
 }
 
+key_action['scroll_current_window_bottom'] = proc {
+	if current_scroll_window = TextWindow.list[0]
+		current_scroll_window.scroll(current_scroll_window.max_buffer_size)
+	end
+	command_window.noutrefresh
+	Curses.doupdate
+}
+
 key_action['previous_command'] = proc {
 	if command_history_pos < (command_history.length - 1)
 		command_history[command_history_pos] = command_buffer.dup
