@@ -773,6 +773,28 @@ def get_color_pair_id(fg_code, bg_code)
 	end
 end
 
+# Implement support for basic readline-style kill and yank (cut and paste)
+# commands.  Successive calls to delete_word, backspace_word, kill_forward, and
+# kill_line will accumulate text into the kill_buffer as long as no other
+# commands have changed the command buffer.  These commands call kill_before to
+# reset the kill_buffer if the command buffer has changed, add the newly
+# deleted text to the kill_buffer, and finally call kill_after to remember the
+# state of the command buffer for next time.
+kill_buffer   = ''
+kill_original = ''
+kill_last     = ''
+kill_last_pos = 0
+kill_before = proc {
+	if kill_last != command_buffer || kill_last_pos != command_buffer_pos
+		kill_buffer = ''
+		kill_original = command_buffer
+	end
+}
+kill_after = proc {
+	kill_last = command_buffer.dup
+	kill_last_pos = command_buffer_pos
+}
+
 fix_layout_number = proc { |str|
 	str = str.gsub('lines', Curses.lines.to_s).gsub('cols', Curses.cols.to_s)
 	str.untaint
@@ -1238,7 +1260,10 @@ key_action['cursor_backspace_word'] = proc {
 			deleted_alnum = deleted_alnum || next_char.alnum?
 			deleted_nonspace = !next_char.space?
 			num_deleted += 1
+			kill_before.call
+			kill_buffer = next_char + kill_buffer
 			key_action['cursor_backspace'].call
+			kill_after.call
 		else
 			break
 		end
@@ -1255,11 +1280,50 @@ key_action['cursor_delete_word'] = proc {
 			deleted_alnum = deleted_alnum || next_char.alnum?
 			deleted_nonspace = !next_char.space?
 			num_deleted += 1
+			kill_before.call
+			kill_buffer = kill_buffer + next_char
 			key_action['cursor_delete'].call
+			kill_after.call
 		else
 			break
 		end
 	end
+}
+
+key_action['cursor_kill_forward'] = proc {
+	if command_buffer_pos < command_buffer.length
+		kill_before.call
+		if command_buffer_pos == 0
+			kill_buffer = kill_buffer + command_buffer
+			command_buffer = ''
+		else
+			kill_buffer = kill_buffer + command_buffer[command_buffer_pos..-1]
+			command_buffer = command_buffer[0..(command_buffer_pos-1)]
+		end
+		kill_after.call
+		command_window.clrtoeol
+		command_window.noutrefresh
+		Curses.doupdate
+	end
+}
+
+key_action['cursor_kill_line'] = proc {
+	if command_buffer.length != 0
+		kill_before.call
+		kill_buffer = kill_original
+		command_buffer = ''
+		command_buffer_pos = 0
+		command_buffer_offset = 0
+		kill_after.call
+		command_window.setpos(0, 0)
+		command_window.clrtoeol
+		command_window.noutrefresh
+		Curses.doupdate
+	end
+}
+
+key_action['cursor_yank'] = proc {
+	kill_buffer.each_char { |c| command_window_put_ch.call(c) }
 }
 
 key_action['switch_current_window'] = proc {
