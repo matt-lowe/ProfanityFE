@@ -1705,10 +1705,20 @@ Thread.new {
 						else
 							need_prompt = true
 						end
-					elsif xml =~ /^<spell>(.*?)<\/spell>$/
-						nil
-#					elsif xml =~ /^<right/
-#					elsif xml =~ /^<left/
+					elsif xml =~ /^<spell(?:>|\s.*?>)(.*?)<\/spell>$/
+						if window = indicator_handler['spell']
+							window.clear
+							window.label = $1
+							window.update($1 == 'None' ? 0 : 1)
+							need_update = true
+						end
+					elsif xml =~ /^<(right|left)(?:>|\s.*?>).*?(\S*?)<\/\1>/
+						if window = indicator_handler[$1]
+							window.clear
+							window.label = $2
+							window.update($2 == 'Empty' ? 0 : 1)
+							need_update = true
+						end
 					elsif xml =~ /^<roundTime value=('|")([0-9]+)\1/
 						if window = countdown_handler['roundtime']
 							temp_roundtime_end = $2.to_i
