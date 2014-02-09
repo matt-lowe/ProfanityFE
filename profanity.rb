@@ -181,7 +181,7 @@ class TextWindow < Curses::Window
 					@scrollbar.setpos(last_scrollbar_pos, 0)
 					@scrollbar.addch '|'
 					@scrollbar.setpos(@scrollbar_pos, 0)
-					@scrollbar.attron(color_pair(get_color_pair_id(nil, 'ffffff'))|Curses::A_NORMAL) {
+					@scrollbar.attron(Curses::A_REVERSE) {
 						@scrollbar.addch ' '
 					}
 					@scrollbar.noutrefresh
@@ -190,7 +190,7 @@ class TextWindow < Curses::Window
 				for num in 0...maxy
 					@scrollbar.setpos(num, 0)
 					if num == @scrollbar_pos
-						@scrollbar.attron(color_pair(get_color_pair_id(nil, 'ffffff'))|Curses::A_NORMAL) {
+						@scrollbar.attron(Curses::A_REVERSE) {
 							@scrollbar.addch ' '
 						}
 					else
