@@ -520,6 +520,7 @@ unless File.exists?(SETTINGS_FILENAME)
 	<key id='end' action='cursor_end'/>
 	<key id='backspace' action='cursor_backspace'/>
 	<key id='win_backspace' action='cursor_backspace'/>
+	<key id='ctrl+?' action='cursor_backspace'/>
 	<key id='delete' action='cursor_delete'/>
 	<key id='tab' action='switch_current_window'/>
 	<key id='alt+page_up' action='scroll_current_window_up_one'/>
@@ -633,6 +634,7 @@ key_name = {
 #	'ctrl+z'    => 26,
 	'alt'       => 27,
 	'escape'    => 27,
+	'ctrl+?'    => 127,
 	'down'      => 258,
 	'up'        => 259,
 	'left'      => 260,
