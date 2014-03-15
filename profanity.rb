@@ -181,7 +181,7 @@ class TextWindow < Curses::Window
 					@scrollbar.setpos(last_scrollbar_pos, 0)
 					@scrollbar.addch '|'
 					@scrollbar.setpos(@scrollbar_pos, 0)
-					@scrollbar.attron(color_pair(get_color_pair_id(nil, 'ffffff'))|Curses::A_NORMAL) {
+					@scrollbar.attron(Curses::A_REVERSE) {
 						@scrollbar.addch ' '
 					}
 					@scrollbar.noutrefresh
@@ -190,7 +190,7 @@ class TextWindow < Curses::Window
 				for num in 0...maxy
 					@scrollbar.setpos(num, 0)
 					if num == @scrollbar_pos
-						@scrollbar.attron(color_pair(get_color_pair_id(nil, 'ffffff'))|Curses::A_NORMAL) {
+						@scrollbar.attron(Curses::A_REVERSE) {
 							@scrollbar.addch ' '
 						}
 					else
@@ -520,6 +520,7 @@ unless File.exists?(SETTINGS_FILENAME)
 	<key id='end' action='cursor_end'/>
 	<key id='backspace' action='cursor_backspace'/>
 	<key id='win_backspace' action='cursor_backspace'/>
+	<key id='ctrl+?' action='cursor_backspace'/>
 	<key id='delete' action='cursor_delete'/>
 	<key id='tab' action='switch_current_window'/>
 	<key id='alt+page_up' action='scroll_current_window_up_one'/>
@@ -633,6 +634,7 @@ key_name = {
 #	'ctrl+z'    => 26,
 	'alt'       => 27,
 	'escape'    => 27,
+	'ctrl+?'    => 127,
 	'down'      => 258,
 	'up'        => 259,
 	'left'      => 260,
@@ -770,6 +772,28 @@ def get_color_pair_id(fg_code, bg_code)
 		color_pair_id
 	end
 end
+
+# Implement support for basic readline-style kill and yank (cut and paste)
+# commands.  Successive calls to delete_word, backspace_word, kill_forward, and
+# kill_line will accumulate text into the kill_buffer as long as no other
+# commands have changed the command buffer.  These commands call kill_before to
+# reset the kill_buffer if the command buffer has changed, add the newly
+# deleted text to the kill_buffer, and finally call kill_after to remember the
+# state of the command buffer for next time.
+kill_buffer   = ''
+kill_original = ''
+kill_last     = ''
+kill_last_pos = 0
+kill_before = proc {
+	if kill_last != command_buffer || kill_last_pos != command_buffer_pos
+		kill_buffer = ''
+		kill_original = command_buffer
+	end
+}
+kill_after = proc {
+	kill_last = command_buffer.dup
+	kill_last_pos = command_buffer_pos
+}
 
 fix_layout_number = proc { |str|
 	str = str.gsub('lines', Curses.lines.to_s).gsub('cols', Curses.cols.to_s)
@@ -1236,7 +1260,10 @@ key_action['cursor_backspace_word'] = proc {
 			deleted_alnum = deleted_alnum || next_char.alnum?
 			deleted_nonspace = !next_char.space?
 			num_deleted += 1
+			kill_before.call
+			kill_buffer = next_char + kill_buffer
 			key_action['cursor_backspace'].call
+			kill_after.call
 		else
 			break
 		end
@@ -1253,11 +1280,50 @@ key_action['cursor_delete_word'] = proc {
 			deleted_alnum = deleted_alnum || next_char.alnum?
 			deleted_nonspace = !next_char.space?
 			num_deleted += 1
+			kill_before.call
+			kill_buffer = kill_buffer + next_char
 			key_action['cursor_delete'].call
+			kill_after.call
 		else
 			break
 		end
 	end
+}
+
+key_action['cursor_kill_forward'] = proc {
+	if command_buffer_pos < command_buffer.length
+		kill_before.call
+		if command_buffer_pos == 0
+			kill_buffer = kill_buffer + command_buffer
+			command_buffer = ''
+		else
+			kill_buffer = kill_buffer + command_buffer[command_buffer_pos..-1]
+			command_buffer = command_buffer[0..(command_buffer_pos-1)]
+		end
+		kill_after.call
+		command_window.clrtoeol
+		command_window.noutrefresh
+		Curses.doupdate
+	end
+}
+
+key_action['cursor_kill_line'] = proc {
+	if command_buffer.length != 0
+		kill_before.call
+		kill_buffer = kill_original
+		command_buffer = ''
+		command_buffer_pos = 0
+		command_buffer_offset = 0
+		kill_after.call
+		command_window.setpos(0, 0)
+		command_window.clrtoeol
+		command_window.noutrefresh
+		Curses.doupdate
+	end
+}
+
+key_action['cursor_yank'] = proc {
+	kill_buffer.each_char { |c| command_window_put_ch.call(c) }
 }
 
 key_action['switch_current_window'] = proc {
@@ -1299,6 +1365,14 @@ key_action['scroll_current_window_up_page'] = proc {
 key_action['scroll_current_window_down_page'] = proc {
 	if current_scroll_window = TextWindow.list[0]
 		current_scroll_window.scroll(current_scroll_window.maxy - 1)
+	end
+	command_window.noutrefresh
+	Curses.doupdate
+}
+
+key_action['scroll_current_window_bottom'] = proc {
+	if current_scroll_window = TextWindow.list[0]
+		current_scroll_window.scroll(current_scroll_window.max_buffer_size)
 	end
 	command_window.noutrefresh
 	Curses.doupdate
@@ -1705,10 +1779,20 @@ Thread.new {
 						else
 							need_prompt = true
 						end
-					elsif xml =~ /^<spell>(.*?)<\/spell>$/
-						nil
-#					elsif xml =~ /^<right/
-#					elsif xml =~ /^<left/
+					elsif xml =~ /^<spell(?:>|\s.*?>)(.*?)<\/spell>$/
+						if window = indicator_handler['spell']
+							window.clear
+							window.label = $1
+							window.update($1 == 'None' ? 0 : 1)
+							need_update = true
+						end
+					elsif xml =~ /^<(right|left)(?:>|\s.*?>).*?(\S*?)<\/\1>/
+						if window = indicator_handler[$1]
+							window.clear
+							window.label = $2
+							window.update($2 == 'Empty' ? 0 : 1)
+							need_update = true
+						end
 					elsif xml =~ /^<roundTime value=('|")([0-9]+)\1/
 						if window = countdown_handler['roundtime']
 							temp_roundtime_end = $2.to_i
