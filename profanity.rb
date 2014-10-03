@@ -1115,7 +1115,7 @@ key_action['cursor_right'] = proc {
 
 key_action['cursor_word_left'] = proc {
 	if command_buffer_pos > 0
-		if m = command_buffer[0...(command_buffer_pos-1)].match(/.*(\s)/)
+		if m = command_buffer[0...(command_buffer_pos-1)].match(/.*(\w[^\w\s]|\W\w|\s\S)/)
 			new_pos = m.begin(1) + 1
 		else
 			new_pos = 0
@@ -1136,8 +1136,8 @@ key_action['cursor_word_left'] = proc {
 
 key_action['cursor_word_right'] = proc {
 	if command_buffer_pos < command_buffer.length
-		if m = command_buffer[command_buffer_pos..-1].match(/\s([^\s])/)
-			new_pos = command_buffer_pos + m.begin(1)
+		if m = command_buffer[command_buffer_pos..-1].match(/\w[^\w\s]|\W\w|\s\S/)
+			new_pos = command_buffer_pos + m.begin(0) + 1
 		else
 			new_pos = command_buffer.length
 		end
