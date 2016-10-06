@@ -799,7 +799,7 @@ fix_layout_number = proc { |str|
 	str = str.gsub('lines', Curses.lines.to_s).gsub('cols', Curses.cols.to_s)
 	str.untaint
 	begin
-		proc { $SAFE = 3; eval(str) }.call.to_i
+		proc { $SAFE = 1; eval(str) }.call.to_i
 	rescue
 		$stderr.puts $!
 		$stderr.puts $!.backtrace[0..1]
@@ -1004,7 +1004,8 @@ do_macro = proc { |macro|
 	# fixme: gsub %whatever
 	backslash = false
 	at_pos = nil
-	macro.split('').each { |ch|
+	backfill = nil
+	macro.split('').each_with_index { |ch, i|
 		if backslash
 			if ch == '\\'
 				command_window_put_ch.call('\\')
@@ -1020,7 +1021,7 @@ do_macro = proc { |macro|
 			elsif ch == '@'
 				command_window_put_ch.call('@')
 			elsif ch == '?'
-				# fixme
+				backfill = i - 3
 			else
 				nil
 			end
@@ -1044,6 +1045,11 @@ do_macro = proc { |macro|
 		end
 	end
 	command_window.noutrefresh
+	if backfill then
+		command_window.setpos(0,backfill)
+		command_buffer_pos = backfill
+		backfill = nil
+	end
 	Curses.doupdate
 }
 
