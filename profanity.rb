@@ -1425,6 +1425,19 @@ key_action['scroll_current_window_bottom'] = proc {
 	Curses.doupdate
 }
 
+class String
+	def &(other)
+		shortest, longest = [self, other].sort { |a, b| a.size - b.size }
+
+		shortest.each_char.to_a
+			.zip(longest.each_char.to_a)
+			.take_while { |a, b| a == b }
+			.transpose
+			.first
+			.join("")
+	end
+end
+
 class Autocomplete
 	HIGHLIGHT = "a6e22e"
 	##
@@ -1450,9 +1463,7 @@ class Autocomplete
 	## @return     String     a String<0..n> of which the characters exist in all suggestions
 	##
 	def self.find_branch(suggestions)
-		suggestions.map(&:each_char).map(&:to_a)
-			.reduce(&:&)
-			.join("")
+		suggestions.reduce(&:&)
 	end
 end
 
