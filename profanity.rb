@@ -30,7 +30,40 @@ require 'thread'
 require 'socket'
 require 'rexml/document'
 require 'curses'
+require 'fileutils'
+
 include Curses
+
+module Profanity
+	APP_DIR = Dir.home + "/." + self.name.downcase
+	##
+	## setup app dir
+	##
+	FileUtils.mkdir_p APP_DIR
+
+	def self.app_file(path)
+		APP_DIR + "/" + path
+	end
+
+	LOG_FILE       = app_file "debug.log"
+	SETTINGS_FILE  = app_file "default.xml"
+
+	def self.log_file
+		File.open(LOG_FILE, 'a') { |file| yield file }
+	end
+
+	def self.set_terminal_title(title)
+		system("printf \"\033]0;#{title}\007\"")
+		Process.setproctitle title
+	end
+
+	def self.log(str)
+		log_file { |f| 
+			f.puts str
+		}
+	end
+
+end
 
 Curses.init_screen
 Curses.start_color
@@ -443,6 +476,7 @@ for arg in ARGV
 		puts "   --default-background-color-id=<id>"
 		puts "   --custom-colors=<on|off>"
 		puts "   --settings-file=<filename>"
+		puts "   --char=<character>"
 		puts ""
 		exit
 	elsif arg =~ /^\-\-port=([0-9]+)$/
@@ -454,14 +488,14 @@ for arg in ARGV
 	elsif arg =~ /^\-\-custom\-colors=(on|off|yes|no)$/
 		fix_setting = { 'on' => true, 'yes' => true, 'off' => false, 'no' => false }
 		CUSTOM_COLORS = fix_setting[$1]
+	elsif arg =~ /^\-\-char=(.*?)$/
+		SETTINGS_FILENAME = Profanity.app_file($1.downcase + ".xml")
+		Profanity.set_terminal_title $1.capitalize
 	elsif arg =~ /^\-\-settings\-file=(.*?)$/
 		SETTINGS_FILENAME = $1
 	end
 end
 
-def log(value)
-		File.open('~/profanity.log', 'a') { |f| f.puts value }
-end
 
 unless defined?(PORT)
 	PORT = 8000
@@ -473,7 +507,7 @@ unless defined?(DEFAULT_BACKGROUND_COLOR_ID)
 	DEFAULT_BACKGROUND_COLOR_ID = 0
 end
 unless defined?(SETTINGS_FILENAME)
-	SETTINGS_FILENAME = File.expand_path('~/.profanity.xml')
+	SETTINGS_FILENAME = Profanity::SETTINGS_FILE
 end
 unless defined?(CUSTOM_COLORS)
 	CUSTOM_COLORS = Curses.can_change_color?
@@ -980,8 +1014,8 @@ load_settings_file = proc { |reload|
 		rescue
 			$stdout.puts $!
 			$stdout.puts $!.backtrace[0..1]
-			log $!
-			log $!.backtrace[0..1]
+			Profanity.log $!
+			Profanity.log $!.backtrace[0..1]
 
 		end
 	}
@@ -1171,7 +1205,13 @@ key_action['cursor_home'] = proc {
 		begin
 			command_window.insch(command_buffer[command_buffer_offset-num])
 		rescue
-			File.open('profanity.log', 'a') { |f| f.puts "command_buffer: #{command_buffer.inspect}"; f.puts "command_buffer_offset: #{command_buffer_offset.inspect}"; f.puts "num: #{num.inspect}"; f.puts $!; f.puts $!.backtrace[0...4] }
+			Profanity.log_file { |f| 
+				f.puts "command_buffer: #{command_buffer.inspect}"; 
+				f.puts "command_buffer_offset: #{command_buffer_offset.inspect}"; 
+				f.puts "num: #{num.inspect}"; 
+				f.puts $!; 
+				f.puts $!.backtrace[0...4] 
+			}
 			exit
 		end
 	end
@@ -1237,13 +1277,6 @@ class String
 	end
 end
 
-class Debug
-	LOG_FILE = Dir.home + "/profanity.log"
-
-	def self.log
-		File.open(LOG_FILE, 'a') { |file| yield file }
-	end
-end
 
 key_action['cursor_delete'] = proc {
 	if (command_buffer.length > 0) and (command_buffer_pos < command_buffer.length)
@@ -1395,8 +1428,8 @@ key_action['scroll_current_window_bottom'] = proc {
 class Autocomplete
 	HIGHLIGHT = "a6e22e"
 	##
-	## @brief      checks to see if the historical command is a possible completion
-	##             of the current state of the command buffer
+	## @brief      checks to see if the historical command is a possible 
+	## 						 completion of the current state of the command buffer
 	##
 	## @param      current    String  The current command string
 	## @param      historical String  The historical command string
@@ -1409,12 +1442,17 @@ class Autocomplete
 		current.each_with_index.map { |char, i| char == historical[i] ? 1 : 0 }
 			.reduce(&:+) == current.size
 	end
-
+	##
+	## @brief      finds the first divergence in an array of Strings that should
+	##
+	## @param      suggestions Array(String)  The suggestions
+	##
+	## @return     String     a String<0..n> of which the characters exist in all suggestions
+	##
 	def self.find_branch(suggestions)
-		suggestions.map { |cmd| cmd.split("") }
-			.reduce(&:zip)
-			.take_while { |eles| eles.reduce(&:==) }
-			.transpose.first.join("")
+		suggestions.map(&:each_char).map(&:to_a)
+			.reduce(&:&)
+			.join("")
 	end
 end
 
@@ -1425,44 +1463,52 @@ write_to_client = proc { |str, color|
 }
 
 key_action['autocomplete'] = proc {
-	current = command_buffer.dup
-	history = command_history.map(&:strip).reject(&:empty?).compact
+	begin
+		current = command_buffer.dup
+		history = command_history.map(&:strip).reject(&:empty?).compact.uniq
 
-	# collection of possibilities
-	possibilities = []
+		# collection of possibilities
+		possibilities = []
 
-	history.each { |historical|
-		if Autocomplete.compare(current, historical)
-			possibilities.push historical
+		history.each { |historical|
+			if Autocomplete.compare(current, historical)
+				possibilities.push historical
+			end
+		}
+
+		if possibilities.size == 0
+			write_to_client.call "[autocomplete] no suggestions", Autocomplete::HIGHLIGHT
 		end
-	}
 
-	if possibilities.size == 0
-		write_to_client.call "[autocomplete] no suggestions", Autocomplete::HIGHLIGHT
-	end
+		if possibilities.size > 1
+			# we should autoprogress the command input until there 
+			# is a divergence in the possible commands
+			divergence = Autocomplete.find_branch(possibilities)
+			
+			command_buffer = divergence
+			command_buffer_offset = [ (command_buffer.length - command_window.maxx + 1), 0 ].max
+			command_buffer_pos = command_buffer.length
+			command_window.addstr divergence[current.size..-1]
+			command_window.setpos(0, divergence.size)
+			
+			# show the clien the possible commands in their stream
+			write_to_client.call("[autocomplete] " + possibilities.join(", "), Autocomplete::HIGHLIGHT)
+		end
 
-	if possibilities.size > 1
-		# we should autoprogress the command input until their is a divergence
-		# in the possible commands
-		divergence = Autocomplete.find_branch(possibilities)
-		command_buffer = divergence
-		command_buffer_offset = [ (command_buffer.length - command_window.maxx + 1), 0 ].max
-		command_buffer_pos = command_buffer.length
-		command_window.addstr divergence[current.size..-1]
-		command_window.setpos(0, divergence.size)
-		# show the clien the possible commands in their stream
-		write_to_client.call("[autocomplete] " + possibilities.join(", "), Autocomplete::HIGHLIGHT)
+		if possibilities.size == 1
+			command_buffer = possibilities.first
+			command_buffer_offset = [ (command_buffer.length - command_window.maxx + 1), 0 ].max
+			command_buffer_pos = command_buffer.length
+			command_window.addstr possibilities.first[current.size..-1]
+			command_window.setpos(0, possibilities.first.size)
+			Curses.doupdate
+		end
+	rescue Exception => e
+		Profanity.log_file { |f| 
+			f.puts "[autocomplete error #{Time.now}] #{$!}"
+			f.puts $!.backtrace[0...4] 
+		}
 	end
-
-	if possibilities.size == 1
-		command_buffer = possibilities.first
-		command_buffer_offset = [ (command_buffer.length - command_window.maxx + 1), 0 ].max
-		command_buffer_pos = command_buffer.length
-		command_window.addstr possibilities.first[current.size..-1]
-		command_window.setpos(0, possibilities.first.size)
-		Curses.doupdate
-	end
-	
 }
 
 key_action['previous_command'] = proc {
@@ -2085,7 +2131,7 @@ Thread.new {
 		command_window.noutrefresh
 		Curses.doupdate
 	rescue
-		Debug.log { |f| f.puts $!; f.puts $!.backtrace[0...4] }
+		Profanity.log { |f| f.puts $!; f.puts $!.backtrace[0...4] }
 		exit
 	end
 }
@@ -2114,7 +2160,7 @@ begin
 		end
 	}
 rescue
-	Debug.log { |f| f.puts $!; f.puts $!.backtrace[0...4] }
+	Profanity.log { |f| f.puts $!; f.puts $!.backtrace[0...4] }
 ensure
 	server.close rescue()
 	Curses.close_screen
