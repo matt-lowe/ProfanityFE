@@ -1476,6 +1476,9 @@ write_to_client = proc { |str, color|
 key_action['autocomplete'] = proc {
 	begin
 		current = command_buffer.dup
+		# no output on empty CLI
+		return if current.strip.empty?
+
 		history = command_history.map(&:strip).reject(&:empty?).compact.uniq
 
 		# collection of possibilities
@@ -1930,7 +1933,8 @@ Thread.new {
 							window.update($1 == 'None' ? 0 : 1)
 							need_update = true
 						end
-					elsif xml =~ /^<(right|left)(?:>|\s.*?>).*?(\S*?)<\/\1>/
+					elsif xml =~ /^<(right|left)(?:>|\s.*?>)(.*?)<\/\1>/
+						Profanity.log(xml)
 						if window = indicator_handler[$1]
 							window.clear
 							window.label = $2
@@ -1996,6 +2000,8 @@ Thread.new {
 								need_update = true
 							end
 						end
+					elsif xml =~ /^<hand/
+						
 					elsif xml =~ /^<progressBar id='pbarStance' value='([0-9]+)'/
 						if window = progress_handler['stance']
 							if window.update($1.to_i, 100)
