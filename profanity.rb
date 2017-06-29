@@ -1463,6 +1463,15 @@ key_action['send_command'] = proc {
 	end
 	if cmd =~ /^\.quit/
 		exit
+	elsif cmd =~ /^\.key/i
+		window = stream_handler['main']
+		window.add_string("* ")
+		window.add_string("* Waiting for key press...")
+		command_window.noutrefresh
+		Curses.doupdate
+		window.add_string("* Detected keycode: #{command_window.getch.to_s}")
+		window.add_string("* ")
+		Curses.doupdate
 	elsif cmd =~ /^\.copy/
 		# fixme
 	elsif cmd =~ /^\.fixcolor/i
