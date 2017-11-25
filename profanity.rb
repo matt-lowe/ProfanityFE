@@ -989,7 +989,7 @@ load_settings_file = proc { |reload|
 				xml_root.elements.each { |e|
 					if e.name == 'highlight'
 						begin
-							r = Regexp.new(e.text)
+							r = %r{#{e.text}}x
 						rescue
 							r = nil
 							$stderr.puts e.to_s
