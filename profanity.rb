@@ -385,7 +385,7 @@ class IndicatorWindow < Curses::Window
 	def redraw
 		setpos(0,0)
 		if @value
-			if @value.class == Integer
+			if @value.is_a?(Integer)
 				attron(color_pair(get_color_pair_id(@fg[@value], @bg[@value]))|Curses::A_NORMAL) { addstr @label }
 			else
 				attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) { addstr @label }
