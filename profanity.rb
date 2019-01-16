@@ -90,7 +90,7 @@ module Profanity
 	SETTINGS_FILE  = app_file "default.xml"
 
 	def self.log_file
-		File.open(LOG_FILE, 'a') { |file| yield file }
+		return File.open(LOG_FILE, 'a') { |file| yield file } if block_given?
 	end
 
 	def self.set_terminal_title(title)
@@ -99,9 +99,7 @@ module Profanity
 	end
 
 	def self.log(str)
-		log_file { |f| 
-			f.puts str
-		}
+		log_file { |f| f.puts str }
 	end
 
 	def self.help_menu()
@@ -534,6 +532,8 @@ unless defined?(SETTINGS_FILENAME)
 		#{Opts.parse()}
 	ERROR
 end
+
+Profanity.set_terminal_title(Opts.char.capitalize)
 
 unless defined?(CUSTOM_COLORS)
 	CUSTOM_COLORS = Curses.can_change_color?
@@ -1194,7 +1194,6 @@ class String
 	end
 end
 
-
 key_action['cursor_delete'] = proc {
 	if (command_buffer.length > 0) and (command_buffer_pos < command_buffer.length)
 		if command_buffer_pos == 0
@@ -1212,7 +1211,6 @@ key_action['cursor_delete'] = proc {
 		Curses.doupdate
 	end
 }
-
 
 key_action['cursor_backspace_word'] = proc {
 	num_deleted = 0
@@ -1355,8 +1353,23 @@ class String
 	end
 end
 
+write_to_client = proc { |str, color|
+	stream_handler["main"].add_string str, [{:fg => color, :start => 0, :end => str.size}]
+	command_window.noutrefresh
+	Curses.doupdate
+}
+
 class Autocomplete
 	HIGHLIGHT = "a6e22e"
+
+	@in_menu  = false
+
+	def self.consume(key_code, history:, buffer:)
+		Autocomplete.wrap do
+			return @in_menu = true if key_code == 9 # tab
+			return unless @in_menu
+		end
+	end
 	##
 	## @brief      checks to see if the historical command is a possible 
 	## 						 completion of the current state of the command buffer
@@ -1382,16 +1395,21 @@ class Autocomplete
 	def self.find_branch(suggestions)
 		suggestions.reduce(&:&)
 	end
+
+	def self.wrap()
+		begin
+			yield
+		rescue Exception => e
+			Profanity.log_file { |f| 
+				f.puts "[autocomplete error #{Time.now}] #{$e.message}"
+				f.puts e.backtrace[0...4] 
+			}
+		end
+	end
 end
 
-write_to_client = proc { |str, color|
-	stream_handler["main"].add_string str, [{:fg => color, :start => 0, :end => str.size}]
-	command_window.noutrefresh
-	Curses.doupdate
-}
-
-key_action['autocomplete'] = proc {
-	begin
+key_action['autocomplete'] = proc { |idx|
+	Autocomplete.wrap do 
 		current = command_buffer.dup
 		# no output on empty CLI
 		return if current.strip.empty?
@@ -1421,24 +1439,22 @@ key_action['autocomplete'] = proc {
 			command_buffer_pos = command_buffer.length
 			command_window.addstr divergence[current.size..-1]
 			command_window.setpos(0, divergence.size)
-			
-			# show the clien the possible commands in their stream
-			write_to_client.call("[autocomplete] " + possibilities.join(", "), Autocomplete::HIGHLIGHT)
+
+			write_to_client.call("[autocomplete:#{possibilities.size}]", Autocomplete::HIGHLIGHT)
+			possibilities.each_with_index do |command, i| 
+				write_to_client.call("[#{i}] #{command}", Autocomplete::HIGHLIGHT) end
 		end
 
-		if possibilities.size == 1
-			command_buffer = possibilities.first
+		idx = 0 if possibilities.size == 1
+
+		if idx && possibilities[idx]
+			command_buffer = possibilities[idx]
 			command_buffer_offset = [ (command_buffer.length - command_window.maxx + 1), 0 ].max
 			command_buffer_pos = command_buffer.length
 			command_window.addstr possibilities.first[current.size..-1]
 			command_window.setpos(0, possibilities.first.size)
 			Curses.doupdate
 		end
-	rescue Exception => e
-		Profanity.log_file { |f| 
-			f.puts "[autocomplete error #{Time.now}] #{$!}"
-			f.puts $!.backtrace[0...4] 
-		}
 	end
 }
 
@@ -2050,8 +2066,8 @@ Thread.new {
 					elsif xml =~ /^<LaunchURL src="([^"]+)"/
 						url = "\"https://www.play.net#{$1}\""
 						# assume linux if not mac
-						cmd = RUBY_PLATFORM =~ /darwin/ ? "open" : "firefox"
-						system("#{cmd} #{url}")
+						cmd = RUBY_PLATFORM =~ /darwin/ ? "open" : "google-chrome"
+						system("#{cmd} #{url} >/dev/null 2>&1 &")
 					else
 						nil
 					end
@@ -2082,6 +2098,7 @@ begin
 	key_combo = nil
 	loop {
 		ch = command_window.getch
+		Autocomplete.consume(ch, history: command_history, buffer: command_buffer)
 		if key_combo
 			if key_combo[ch].class == Proc
 				key_combo[ch].call
