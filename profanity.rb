@@ -1842,7 +1842,7 @@ Thread.new {
 					need_update = true
 				end
 			else
-				while (start_pos = (line =~ /(<(prompt|spell|right|left|inv|compass).*?\2>|<.*?>)/))
+				while (start_pos = (line =~ /(<(prompt|spell|right|left|inv|style|compass).*?\2>|<.*?>)/))
 					xml = $1
 					line.slice!(start_pos, xml.length)
 					if xml =~ /^<prompt time=('|")([0-9]+)\1.*?>(.*?)&gt;<\/prompt>$/
@@ -1873,6 +1873,14 @@ Thread.new {
 							window.clear
 							window.label = $1
 							window.update($1 == 'None' ? 0 : 1)
+							need_update = true
+						end
+					elsif xml =~ /^<streamWindow id='room' title='Room' subtitle=" \- (.*?)"/
+						
+						if window = indicator_handler["room"]
+							window.clear
+							window.label = $1
+							window.update($1 ? 0 : 1)
 							need_update = true
 						end
 					elsif xml =~ /^<(right|left)(?:>|\s.*?>)(.*?)<\/\1>/
