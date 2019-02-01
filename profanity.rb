@@ -25,7 +25,7 @@
 =end
 
 $version = 0.4
-
+require 'benchmark'
 require 'thread'
 require 'socket'
 require 'rexml/document'
@@ -93,9 +93,36 @@ module Profanity
 		return File.open(LOG_FILE, 'a') { |file| yield file } if block_given?
 	end
 
+	@title  = nil
+	@status = nil
+	@char   = Opts.char.capitalize
+	@state  = {}
+
+	def self.fetch(key, _default = nil)
+		@state.fetch(key, _default)
+	end
+
+	def self.put(**args)
+		@state.merge!(args)
+	end
+
 	def self.set_terminal_title(title)
+		return if @title.eql?(title) # noop
+		@title = title	
 		system("printf \"\033]0;#{title}\007\"")
-		Process.setproctitle title
+		Process.setproctitle(title)
+	end
+
+	def self.app_title(*parts)
+		return if @status == parts.join("")
+		@status = parts.join("")
+		return set_terminal_title(@char) if @status.empty?
+		set_terminal_title([@char, "[#{parts.reject(&:empty?).join(":")}]"].join(" "))
+	end
+
+	def self.update_process_title()
+		return if Opts["no-status"]
+		app_title(Profanity.fetch(:prompt, ""), Profanity.fetch(:room, ""))
 	end
 
 	def self.log(str)
@@ -107,12 +134,13 @@ module Profanity
 	
 			Profanity FrontEnd v#{$version}
 				
-			--port=<port>
+			  --port=<port>
 				--default-color-id=<id>
 				--default-background-color-id=<id>
 				--custom-colors=<on|off>
 				--settings-file=<filename>
 				--char=<character>
+				--no-status                            do not redraw the process title with status updates
 		HELP
 		exit
 	end
@@ -1400,10 +1428,8 @@ class Autocomplete
 		begin
 			yield
 		rescue Exception => e
-			Profanity.log_file { |f| 
-				f.puts "[autocomplete error #{Time.now}] #{$e.message}"
-				f.puts e.backtrace[0...4] 
-			}
+			Profanity.log("[autocomplete error #{Time.now}] #{$e.message}")
+			e.backtrace[0...4].each do |ln| Profanity.log(ln) end
 		end
 	end
 end
@@ -1411,19 +1437,16 @@ end
 key_action['autocomplete'] = proc { |idx|
 	Autocomplete.wrap do 
 		current = command_buffer.dup
-		# no output on empty CLI
-		return if current.strip.empty?
-
 		history = command_history.map(&:strip).reject(&:empty?).compact.uniq
 
 		# collection of possibilities
 		possibilities = []
 
-		history.each { |historical|
-			if Autocomplete.compare(current, historical)
-				possibilities.push historical
+		unless current.strip.empty?
+			history.each do |historical|
+				possibilities.push(historical) if Autocomplete.compare(current, historical)
 			end
-		}
+		end
 
 		if possibilities.size == 0
 			write_to_client.call "[autocomplete] no suggestions", Autocomplete::HIGHLIGHT
@@ -1846,6 +1869,8 @@ Thread.new {
 					xml = $1
 					line.slice!(start_pos, xml.length)
 					if xml =~ /^<prompt time=('|")([0-9]+)\1.*?>(.*?)&gt;<\/prompt>$/
+						Profanity.put(prompt: "#{$3.clone}".strip)
+						Profanity.update_process_title()
 						unless skip_server_time_offset
 							$server_time_offset = Time.now.to_f - $2.to_f
 							skip_server_time_offset = true
@@ -1876,8 +1901,9 @@ Thread.new {
 							need_update = true
 						end
 					elsif xml =~ /^<streamWindow id='room' title='Room' subtitle=" \- (.*?)"/
-						
-						if window = indicator_handler["room"]
+						Profanity.put(room: $1)
+						Profanity.update_process_title()
+						if window = indicator_handler["room"]	
 							window.clear
 							window.label = $1
 							window.update($1 ? 0 : 1)
@@ -1891,6 +1917,7 @@ Thread.new {
 							need_update = true
 						end
 					elsif xml =~ /^<roundTime value=('|")([0-9]+)\1/
+						Profanity.log(xml)
 						if window = countdown_handler['roundtime']
 							temp_roundtime_end = $2.to_i
 							window.end_time = temp_roundtime_end
