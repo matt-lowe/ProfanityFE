@@ -117,7 +117,7 @@ module Profanity
 		return if @status == parts.join("")
 		@status = parts.join("")
 		return set_terminal_title(@char) if @status.empty?
-		set_terminal_title([@char, "[#{parts.reject(&:empty?).join(":")}]"].join(" "))
+		set_terminal_title([@char, "[#{parts.reject(&:empty?).join(":")}]"].join(" ").gsub(">", ""))
 	end
 
 	def self.update_process_title()
@@ -934,7 +934,7 @@ load_settings_file = proc { |reload|
 				xml_root.elements.each { |e|
 					if e.name == 'highlight'
 						begin
-							r = %r{#{e.text}}x
+							r = %r{#{e.text}}
 						rescue
 							r = nil
 							$stderr.puts e.to_s
