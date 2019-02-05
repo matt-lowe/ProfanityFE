@@ -32,48 +32,17 @@ require 'rexml/document'
 require 'curses'
 require 'fileutils'
 require 'ostruct'
-
 include Curses
 
-module Opts
-  FLAG_PREFIX    = "--"
-  
-  def self.parse_command(h, c)
-    h[c.to_sym] = true
-  end
+require_relative "./ext/string.rb"
 
-  def self.parse_flag(h, f)
-    (name, val) = f[2..-1].split("=")
-    if val.nil?
-      h[name.to_sym] = true
-    else
-      val = val.split(",")
+require_relative "./util/opts.rb"
+require_relative "./ui/countdown.rb"
+require_relative "./ui/indicator.rb"
+require_relative "./ui/progress.rb"
+require_relative "./ui/text.rb"
 
-      h[name.to_sym] = val.size == 1 ? val.first : val
-    end
-  end
-
-  def self.parse(args = ARGV)    
-    config = OpenStruct.new  
-		if args.size > 0
-			config = OpenStruct.new(**args.reduce(Hash.new) do |h, v|
-				if v.start_with?(FLAG_PREFIX)
-					parse_flag(h, v)
-				else
-					parse_command(h, v)
-				end
-				h
-			end)
-		end
-    config
-	end
-	
-	PARSED = parse()
-
-  def self.method_missing(method, *args)
-    PARSED.send(method, *args)
-  end
-end
+require_relative "./plugin/autocomplete.rb"
 
 module Profanity
 	APP_DIR = Dir.home + "/." + self.name.downcase
@@ -151,367 +120,6 @@ Curses.start_color
 Curses.cbreak
 Curses.noecho
 
-class TextWindow < Curses::Window
-	attr_reader :color_stack, :buffer
-	attr_accessor :scrollbar, :indent_word_wrap, :layout
-	@@list = Array.new
-
-	def TextWindow.list
-		@@list
-	end
-
-	def initialize(*args)
-		@buffer = Array.new
-		@buffer_pos = 0
-		@max_buffer_size = 250
-		@indent_word_wrap = true
-		@@list.push(self)
-		super(*args)
-	end
-	def max_buffer_size
-		@max_buffer_size
-	end
-	def max_buffer_size=(val)
-		# fixme: minimum size?  Curses.lines?
-		@max_buffer_size = val.to_i
-	end
-	def add_line(line, line_colors=Array.new)
-		part = [ 0, line.length ]
-		line_colors.each { |h| part.push(h[:start]); part.push(h[:end]) }
-		part.uniq!
-		part.sort!
-		for i in 0...(part.length-1)
-			str = line[part[i]...part[i+1]]
-			color_list = line_colors.find_all { |h| (h[:start] <= part[i]) and (h[:end] >= part[i+1]) }
-			if color_list.empty?
-				addstr str
-			else
-				# shortest length highlight takes precedence when multiple highlights cover the same substring
-				# fixme: allow multiple highlights on a substring when one specifies fg and the other specifies bg
-				color_list = color_list.sort_by { |h| h[:end] - h[:start] }
-				#log("line: #{line}, list: #{color_list}")
-				fg = color_list.map { |h| h[:fg] }.find { |fg| !fg.nil? }
-				bg = color_list.map { |h| h[:bg] }.find { |bg| !bg.nil? }
-				ul = color_list.map { |h| h[:ul] == "true" }.find { |ul| ul }
-				attron(color_pair(get_color_pair_id(fg, bg))|(ul ? Curses::A_UNDERLINE : Curses::A_NORMAL)) {
-					addstr str
-				}
-			end
-		end
-	end
-	def add_string(string, string_colors=Array.new)
-		#
-		# word wrap string, split highlights if needed so each wrapped line is independent, update buffer, update window if needed
-		#
-		while (line = string.slice!(/^.{2,#{maxx-1}}(?=\s|$)/)) or (line = string.slice!(0,(maxx-1)))
-			line_colors = Array.new
-			for h in string_colors
-				line_colors.push(h.dup) if (h[:start] < line.length)
-				h[:end] -= line.length
-				h[:start] = [(h[:start] - line.length), 0].max
-			end
-			string_colors.delete_if { |h| h[:end] < 0 }
-			line_colors.each { |h| h[:end] = [h[:end], line.length].min }
-			@buffer.unshift([line,line_colors])
-			@buffer.pop if @buffer.length > @max_buffer_size
-			if @buffer_pos == 0
-				addstr "\n"
-				add_line(line, line_colors)
-			else
-				@buffer_pos += 1
-				scroll(1) if @buffer_pos > (@max_buffer_size - maxy)
-				update_scrollbar
-			end
-			break if string.chomp.empty?
-			if @indent_word_wrap
-				if string[0,1] == ' '
-					string = " #{string}"
-					string_colors.each { |h|
-						h[:end] += 1;
-						# Never let the highlighting hang off the edge -- it looks weird
-						h[:start] += h[:start] == 0 ? 2 : 1
-					}
-				else
-					string = "  #{string}"
-					string_colors.each { |h| h[:end] += 2; h[:start] += 2 }
-				end
-			else
-				if string[0,1] == ' '
-					string = string[1,string.length]
-					string_colors.each { |h| h[:end] -= 1; h[:start] -= 1 }
-				end
-			end
-		end
-		if @buffer_pos == 0
-			noutrefresh
-		end
-	end
-	def scroll(scroll_num)
-		if scroll_num < 0
-			if (@buffer_pos + maxy + scroll_num.abs) >= @buffer.length
-				scroll_num = 0 - (@buffer.length - @buffer_pos - maxy)
-			end
-			if scroll_num < 0
-				@buffer_pos += scroll_num.abs
-				scrl(scroll_num)
-				setpos(0,0)
-				pos = @buffer_pos + maxy - 1
-				scroll_num.abs.times {
-					add_line(@buffer[pos][0], @buffer[pos][1])
-					addstr "\n"
-					pos -=1
-				}
-				noutrefresh
-			end
-			update_scrollbar
-		elsif scroll_num > 0
-			if @buffer_pos == 0
-				nil
-			else
-				if (@buffer_pos - scroll_num) < 0
-					scroll_num = @buffer_pos
-				end
-				@buffer_pos -= scroll_num
-				scrl(scroll_num)
-				setpos(maxy - scroll_num, 0)
-				pos = @buffer_pos + scroll_num - 1
-				(scroll_num - 1).times {
-					add_line(@buffer[pos][0], @buffer[pos][1])
-					addstr "\n"
-					pos -= 1
-				}
-				add_line(@buffer[pos][0], @buffer[pos][1])
-				noutrefresh
-			end
-		end
-		update_scrollbar
-	end
-	def update_scrollbar
-		if @scrollbar
-			last_scrollbar_pos = @scrollbar_pos
-			@scrollbar_pos = maxy - ((@buffer_pos/[(@buffer.length - maxy), 1].max.to_f) * (maxy - 1)).round - 1
-			if last_scrollbar_pos
-				unless last_scrollbar_pos == @scrollbar_pos
-					@scrollbar.setpos(last_scrollbar_pos, 0)
-					@scrollbar.addch '|'
-					@scrollbar.setpos(@scrollbar_pos, 0)
-					@scrollbar.attron(Curses::A_REVERSE) {
-						@scrollbar.addch ' '
-					}
-					@scrollbar.noutrefresh
-				end
-			else
-				for num in 0...maxy
-					@scrollbar.setpos(num, 0)
-					if num == @scrollbar_pos
-						@scrollbar.attron(Curses::A_REVERSE) {
-							@scrollbar.addch ' '
-						}
-					else
-						@scrollbar.addch '|'
-					end
-				end
-				@scrollbar.noutrefresh
-			end
-		end
-	end
-	def clear_scrollbar
-		@scrollbar_pos = nil
-		@scrollbar.clear
-		@scrollbar.noutrefresh
-	end
-	def resize_buffer
-		# fixme
-	end
-end
-
-class ProgressWindow < Curses::Window
-	attr_accessor :fg, :bg, :label, :layout
-	attr_reader :value, :max_value
-
-	@@list = Array.new
-
-	def ProgressWindow.list
-		@@list
-	end
-
-	def initialize(*args)
-		@label = String.new
-		@fg = [ ]
-		@bg = [ '0000aa', '000055' ]
-		@value = 0
-		@max_value = 100
-		@@list.push(self)
-		super(*args)
-	end
-	def update(new_value, new_max_value=nil)
-		new_max_value ||= @max_value
-		if (new_value == @value) and (new_max_value == @max_value)
-			false
-		else
-			@value = new_value
-			@max_value = [new_max_value, 1].max
-			redraw
-		end
-	end
-	def redraw
-		str = "#{@label}#{@value.to_s.rjust(self.maxx - @label.length)}"
-		percent = [[(@value/@max_value.to_f), 0.to_f].max, 1].min
-		if (@value == 0) and (fg[3] or bg[3])
-			setpos(0, 0)
-			attron(color_pair(get_color_pair_id(@fg[3], @bg[3]))|Curses::A_NORMAL) {
-				addstr str
-			}
-		else
-			left_str = str[0,(str.length*percent).floor].to_s
-			if (@fg[1] or @bg[1]) and (left_str.length < str.length) and (((left_str.length+0.5)*(1/str.length.to_f)) < percent)
-				middle_str = str[left_str.length,1].to_s
-			else
-				middle_str = ''
-			end
-			right_str = str[(left_str.length + middle_str.length),(@label.length + (self.maxx - @label.length))].to_s
-			setpos(0, 0)
-			if left_str.length > 0
-				attron(color_pair(get_color_pair_id(@fg[0], @bg[0]))|Curses::A_NORMAL) {
-					addstr left_str
-				}
-			end
-			if middle_str.length > 0
-				attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) {
-					addstr middle_str
-				}
-			end
-			if right_str.length > 0
-				attron(color_pair(get_color_pair_id(@fg[2], @bg[2]))|Curses::A_NORMAL) {
-					addstr right_str
-				}
-			end
-		end
-		noutrefresh
-		true
-	end
-end
-
-class CountdownWindow < Curses::Window
-	attr_accessor :label, :fg, :bg, :end_time, :secondary_end_time, :active, :layout
-	attr_reader :value, :secondary_value
-
-	@@list = Array.new
-
-	def CountdownWindow.list
-		@@list
-	end
-
-	def initialize(*args)
-		@label = String.new
-		@fg = [ ]
-		@bg = [ nil, 'ff0000', '0000ff' ]
-		@active = nil
-		@end_time = 0
-		@secondary_end_time = 0
-		@@list.push(self)
-		super(*args)
-	end
-	def update
-		old_value, old_secondary_value = @value, @secondary_value
-		@value = [(@end_time.to_f - Time.now.to_f + $server_time_offset.to_f - 0.2).ceil, 0].max
-		@secondary_value = [(@secondary_end_time.to_f - Time.now.to_f + $server_time_offset.to_f - 0.2).ceil, 0].max
-		if (old_value != @value) or (old_secondary_value != @secondary_value) or (@old_active != @active)
-			str = "#{@label}#{[ @value, @secondary_value ].max.to_s.rjust(self.maxx - @label.length)}"
-			setpos(0, 0)
-			if ((@value == 0) and (@secondary_value == 0)) or (@active == false)
-				if @active
-					str = "#{@label}#{'?'.rjust(self.maxx - @label.length)}"
-					left_background_str = str[0,1].to_s
-					right_background_str = str[(left_background_str.length),(@label.length + (self.maxx - @label.length))].to_s
-					attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) {
-						addstr left_background_str
-					}
-					attron(color_pair(get_color_pair_id(@fg[2], @bg[2]))|Curses::A_NORMAL) {
-						addstr right_background_str
-					}
-				else
-					attron(color_pair(get_color_pair_id(@fg[0], @bg[0]))|Curses::A_NORMAL) {
-						addstr str
-					}
-				end
-			else
-				left_background_str = str[0,@value].to_s
-				secondary_background_str = str[left_background_str.length,(@secondary_value - @value)].to_s
-				right_background_str = str[(left_background_str.length + secondary_background_str.length),(@label.length + (self.maxx - @label.length))].to_s
-				if left_background_str.length > 0
-					attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) {
-						addstr left_background_str
-					}
-				end
-				if secondary_background_str.length > 0
-					attron(color_pair(get_color_pair_id(@fg[2], @bg[2]))|Curses::A_NORMAL) {
-						addstr secondary_background_str
-					}
-				end
-				if right_background_str.length > 0
-					attron(color_pair(get_color_pair_id(@fg[3], @bg[3]))|Curses::A_NORMAL) {
-						addstr right_background_str
-					}
-				end
-			end
-			@old_active = @active
-			noutrefresh
-			true
-		else
-			false
-		end
-	end
-end
-
-class IndicatorWindow < Curses::Window
-	@@list = Array.new
-
-	def IndicatorWindow.list
-		@@list
-	end
-
-	attr_accessor :fg, :bg, :layout
-	attr_reader :label, :value
-
-	def label=(str)
-		@label = str
-		redraw
-	end
-
-	def initialize(*args)
-		@fg = [ '444444', 'ffff00' ]
-		@bg = [ nil, nil ]
-		@label = '*'
-		@value = nil
-		@@list.push(self)
-		super(*args)
-	end
-	def update(new_value)
-		if new_value == @value
-			false
-		else
-			@value = new_value
-			redraw
-		end
-	end
-
-	def redraw
-		setpos(0,0)
-		if @value
-			if @value.is_a?(Integer)
-				attron(color_pair(get_color_pair_id(@fg[@value], @bg[@value]))|Curses::A_NORMAL) { addstr @label }
-			else
-				attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) { addstr @label }
-			end
-		else
-			attron(color_pair(get_color_pair_id(@fg[0], @bg[0]))|Curses::A_NORMAL) { addstr @label }
-		end
-		noutrefresh
-		true
-	end
-end
-
 server = nil
 command_buffer        = String.new
 command_buffer_pos    = 0
@@ -542,17 +150,17 @@ PRESET = Hash.new
 LAYOUT = Hash.new
 WINDOWS = Hash.new
 SCROLL_WINDOW = Array.new
-
-def add_prompt(window, prompt_text, cmd="")
-  window.add_string("#{prompt_text}#{cmd}", [ h={ :start => 0, :end => (prompt_text.length + cmd.length), :fg => '555555' } ])
-end
-fix_setting = { 'on' => true, 'yes' => true, 'off' => false, 'no' => false }
-
 PORT                        = (Opts.port                || 8000).to_i
 HOST                        = (Opts.host                || "127.0.0.1")
 DEFAULT_COLOR_ID            = (Opts.color_id            || 7).to_i            
 DEFAULT_BACKGROUND_COLOR_ID = (Opts.background_color_id || 0).to_i
 SETTINGS_FILENAME           = Profanity.app_file(Opts.char.downcase + ".xml") if Opts.char
+
+def add_prompt(window, prompt_text, cmd="")
+  window.add_string("#{prompt_text}#{cmd}", [ h={ :start => 0, :end => (prompt_text.length + cmd.length), :fg => '555555' } ])
+end
+
+fix_setting = { 'on' => true, 'yes' => true, 'off' => false, 'no' => false }
 
 unless defined?(SETTINGS_FILENAME)
 	raise Exception, <<~ERROR
@@ -569,7 +177,6 @@ end
 
 DEFAULT_COLOR_CODE = Curses.color_content(DEFAULT_COLOR_ID).collect { |num| ((num/1000.0)*255).round.to_s(16) }.join('').rjust(6, '0')
 DEFAULT_BACKGROUND_COLOR_CODE = Curses.color_content(DEFAULT_BACKGROUND_COLOR_ID).collect { |num| ((num/1000.0)*255).round.to_s(16) }.join('').rjust(6, '0')
-
 
 xml_escape_list = {
 	'&lt;'   => '<',
@@ -1207,21 +814,6 @@ key_action['cursor_backspace'] = proc {
 	end
 }
 
-class String
-	def alnum?
-		!!match(/^[[:alnum:]]+$/)
-	end
-	def digits?
-		!!match(/^[[:digit:]]+$/)
-	end
-	def punct?
-		!!match(/^[[:punct:]]+$/)
-	end
-	def space?
-		!!match(/^[[:space:]]+$/)
-	end
-end
-
 key_action['cursor_delete'] = proc {
 	if (command_buffer.length > 0) and (command_buffer_pos < command_buffer.length)
 		if command_buffer_pos == 0
@@ -1368,71 +960,11 @@ key_action['scroll_current_window_bottom'] = proc {
 	Curses.doupdate
 }
 
-class String
-	def &(other)
-		shortest, longest = [self, other].sort { |a, b| a.size - b.size }
-
-		shortest.each_char.to_a
-			.zip(longest.each_char.to_a)
-			.take_while { |a, b| a == b }
-			.transpose
-			.first
-			.join("")
-	end
-end
-
 write_to_client = proc { |str, color|
 	stream_handler["main"].add_string str, [{:fg => color, :start => 0, :end => str.size}]
 	command_window.noutrefresh
 	Curses.doupdate
 }
-
-class Autocomplete
-	HIGHLIGHT = "a6e22e"
-
-	@in_menu  = false
-
-	def self.consume(key_code, history:, buffer:)
-		Autocomplete.wrap do
-			return @in_menu = true if key_code == 9 # tab
-			return unless @in_menu
-		end
-	end
-	##
-	## @brief      checks to see if the historical command is a possible 
-	## 						 completion of the current state of the command buffer
-	##
-	## @param      current    String  The current command string
-	## @param      historical String  The historical command string
-	##
-	## @return     Boolean            if it is a possible completion
-	##
-	def self.compare(current, historical)
-		current    = current.split("")
-		historical = historical.split("")
-		current.each_with_index.map { |char, i| char == historical[i] ? 1 : 0 }
-			.reduce(&:+) == current.size
-	end
-	##
-	## @brief      finds the first divergence in an array of Strings that should
-	##
-	## @param      suggestions Array(String)  The suggestions
-	##
-	## @return     String     a String<0..n> of which the characters exist in all suggestions
-	##
-	def self.find_branch(suggestions)
-		suggestions.reduce(&:&)
-	end
-
-	def self.wrap()
-		begin
-			yield
-		rescue Exception => e
-			Profanity.log("[autocomplete error #{Time.now}] #{$e.message}")
-			e.backtrace[0...4].each do |ln| Profanity.log(ln) end
-		end
-	end
-end
 
 key_action['autocomplete'] = proc { |idx|
 	Autocomplete.wrap do 
