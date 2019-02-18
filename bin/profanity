@@ -822,6 +822,7 @@ key_action['cursor_home'] = proc {
          command_window.insch(command_buffer[command_buffer_offset-num])
       rescue
          File.open('profanity.log', 'a') { |f| f.puts "command_buffer: #{command_buffer.inspect}"; f.puts "command_buffer_offset: #{command_buffer_offset.inspect}"; f.puts "num: #{num.inspect}"; f.puts $!; f.puts $!.backtrace[0...4] }
+         Curses.close_screen
          exit
       end
    end
@@ -1112,6 +1113,7 @@ key_action['send_command'] = proc {
       command_history.unshift String.new
    end
    if cmd =~ /^\.quit/
+      Curses.close_screen
       exit
    elsif cmd =~ /^\.key/i
       show_key_code = true
@@ -1148,6 +1150,7 @@ key_action['send_last_command'] = proc {
          Curses.doupdate
       end
       if cmd =~ /^\.quit/i
+         Curses.close_screen
          exit
       elsif cmd =~ /^\.fixcolor/i
          if CUSTOM_COLORS
@@ -1176,6 +1179,7 @@ key_action['send_second_last_command'] = proc {
          Curses.doupdate
       end
       if cmd =~ /^\.quit/i
+         Curses.close_screen
          exit
       elsif cmd =~ /^\.fixcolor/i
          if CUSTOM_COLORS
@@ -1666,15 +1670,11 @@ Thread.new {
             Curses.doupdate
          end
       end
-      stream_handler['main'].add_string ' *'
-      stream_handler['main'].add_string ' * Connection closed'
-      stream_handler['main'].add_string ' *'
-      command_window.noutrefresh
-      Curses.doupdate
-   rescue
-      File.open('profanity.log', 'a') { |f| f.puts $!; f.puts $!.backtrace[0...4] }
-      exit
    end
+   server.close rescue nil
+   server = nil
+   Curses.close_screen
+   exit
 }
 
 begin
