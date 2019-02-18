@@ -385,7 +385,7 @@ class IndicatorWindow < Curses::Window
 	def redraw
 		setpos(0,0)
 		if @value
-			if @value.class == Fixnum
+			if @value.is_a?(Integer)
 				attron(color_pair(get_color_pair_id(@fg[@value], @bg[@value]))|Curses::A_NORMAL) { addstr @label }
 			else
 				attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) { addstr @label }
@@ -1652,7 +1652,7 @@ Thread.new {
 				oc[:start] = 0
 			end
 
-			if current_stream.nil? or stream_handler[current_stream] or (current_stream =~ /^(?:death|logons|thoughts|voln|familiar)$/)
+			if current_stream.nil? or stream_handler[current_stream] or (current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|atomospherics)$/)
 				SETTINGS_LOCK.synchronize {
 					HIGHLIGHT.each_pair { |regex,colors|
 						pos = 0
@@ -1722,7 +1722,7 @@ Thread.new {
 							window.add_string(text, line_colors)
 							need_update = true
 						end
-					elsif current_stream =~ /^(?:death|logons|thoughts|voln|familiar)$/
+					elsif current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|atmospherics)$/
 						if window = stream_handler['main']
 							if PRESET[current_stream]
 								line_colors.push(:start => 0, :fg => PRESET[current_stream][0], :bg => PRESET[current_stream][1], :end => text.length)
