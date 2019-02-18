@@ -47,7 +47,7 @@ command_buffer_pos    = 0
 command_buffer_offset = 0
 command_history       = Array.new
 command_history_pos   = 0
-max_command_history   = 20
+max_command_history   = 100
 min_cmd_length_for_history = 4
 $server_time_offset     = 0
 skip_server_time_offset = false
@@ -63,6 +63,7 @@ command_window = nil
 command_window_layout = nil
 show_key_code = false
 show_key_code_time = nil
+need_update = true
 
 # We need a mutex for the settings because highlights can be accessed during a
 # reload.  For now, it is just used to protect access to HIGHLIGHT, but if we
@@ -76,7 +77,7 @@ WINDOWS = Hash.new
 SCROLL_WINDOW = Array.new
 
 def add_prompt(window, prompt_text, cmd="")
-  window.add_string("#{prompt_text}#{cmd}", [ h={ :start => 0, :end => (prompt_text.length + cmd.length), :fg => '555555' } ])
+  window.add_string("#{prompt_text}#{cmd}", [:start => 0, :end => (prompt_text.length + cmd.length), :fg => '555555'])
 end
 
 for arg in ARGV
@@ -362,11 +363,11 @@ else
       else
          least_error = nil
          least_error_id = nil
-         COLOR_CODE.each_index { |color_id|
-            error = ((COLOR_CODE[color_id][0..1].hex - code[0..1].hex)**2) + ((COLOR_CODE[color_id][2..3].hex - code[2..3].hex)**2) + ((COLOR_CODE[color_id][4..6].hex - code[4..6].hex)**2)
+         COLOR_CODE.each_index { |i|
+            error = ((COLOR_CODE[i][0..1].hex - code[0..1].hex)**2) + ((COLOR_CODE[i][2..3].hex - code[2..3].hex)**2) + ((COLOR_CODE[i][4..6].hex - code[4..6].hex)**2)
             if least_error.nil? or (error < least_error)
                least_error = error
-               least_error_id = color_id
+               least_error_id = i
             end
          }
          COLOR_ID_LOOKUP[code] = least_error_id
@@ -1064,6 +1065,7 @@ key_action['next_command'] = proc {
       unless command_buffer.empty?
          command_history[command_history_pos] = command_buffer.dup
          command_history.unshift String.new
+         command_history.pop while command_history.length > max_command_history
          command_buffer.clear
          command_window.deleteln
          command_buffer_pos = 0
@@ -1119,6 +1121,7 @@ key_action['send_command'] = proc {
          command_history.unshift cmd
       end
       command_history.unshift String.new
+      command_history.pop while command_history.length > max_command_history
    end
    if cmd =~ /^\.quit/
       Curses.close_screen
@@ -1266,7 +1269,7 @@ Thread.new {
             need_prompt = false
          elsif text =~ /^\s*You are stunned for ([0-9]+) rounds?/
             new_stun.call($1.to_i * 5)
-         elsif text =~ /^Deep and resonating, you feel the chant that falls from your lips instill within you with the strength of your faith\.  You crouch beside [A-Z][a-z]+ and gently lift (?:he|she|him|her) into your arms, your muscles swelling with the power of your deity, and cradle (?:him|her) close to your chest\.  Strength and life momentarily seep from your limbs, causing them to feel laden and heavy, and you are overcome with a sudden weakness\.  With a sigh, you are able to lay [A-Z][a-z]+ back down\.$|^Moisture beads upon your skin and you feel your eyes cloud over with the darkness of a rising storm\.  Power builds upon the air and when you utter the last syllable of your spell thunder rumbles from your lips\.  The sound ripples upon the air, and colling with [A-Z][a-z&apos;]+ prone form and a brilliant flash transfers the spiritual energy between you\.$|^Lifting your finger, you begin to chant and draw a series of conjoined circles in the air\.  Each circle turns to mist and takes on a different hue - white, blue, black, red, and green\.  As the last ring is completed, you spread your fingers and gently allow your tips to touch each color before pushing the misty creation towards [A-Z][a-z]+\.  A shock of energy courses through your body as the mist seeps into [A-Z][a-z&apos;]+ chest and life is slowly returned to (?:his|her) body\.$|^Crouching beside the prone form of [A-Z][a-z]+, you softly issue the last syllable of your chant\.  Breathing deeply, you take in the scents around you and let the feel of your surroundings infuse you\.  With only your gaze, you track the area and recreate the circumstances of [A-Z][a-z&apos;]+ within your mind\.  Touching [A-Z][a-z]+, you follow the lines of the web that holds (?:his|her) soul in place and force it back into (?:his|her) body\.  Raw energy courses through you and you feel your sense of justice and vengeance filling [A-Z][a-z]+ with life\.$|^Murmuring softly, you call upon your connection with the Destroyer,? and feel your words twist into an alien, spidery chant\.  Dark shadows laced with crimson swirl before your eyes and at your forceful command sink into the chest of [A-Z][a-z]+\.  The transference of energy is swift and immediate as you bind [A-Z][a-z]+ back into (?:his|her) body\.$|^Rich and lively, the scent of wild flowers suddenly fills the air as you finish your chant, and you feel alive with the energy of spring\.  With renewal at your fingertips, you gently touch [A-Z][a-z]+ on the brow and revel in the sweet rush of energy that passes through you into (?:him|her|his)\.$|^Breathing slowly, you extend your senses towards the world around you and draw into you the very essence of nature\.  You shift your gaze towards [A-z][a-z]+ and carefully release the energy you&apos;ve drawn into yourself towards (?:him|her)\.  A rush of energy briefly flows between the two of you as you feel life slowly return to (?:him|her)\.$|^Your surroundings grow dim\.\.\.you lapse into a state of awareness only, unable to do anything\.\.\.$|^Murmuring softly, a mournful chant slips from your lips and you feel welts appear upon your wrists\.  Dipping them briefly, you smear the crimson liquid the leaks from these sudden wounds in a thin line down [A-Z][a-z&apos;]+ face\.  Tingling with each second that your skin touches (?:his|hers), you feel the transference of your raw energy pass into [A-Z][a-z]+ and momentarily reel with the pain of its release\.  Slowly, the wounds on your wrists heal, though a lingering throb remains\.$|^Emptying all breathe from your body, you slowly still yourself and close your eyes\.  You reach out with all of your senses and feel a film shift across your vision\.  Opening your eyes, you gaze through a white haze and find images of [A-Z][a-z]+ floating above his prone form\.  Acts of [A-Z][a-z]&apos;s? past, present, and future play out before your clouded vision\.  With conviction and faith, you pluck a future image of [A-Z][a-z]+ from the air and coax (?:he|she|his|her) back into (?:he|she|his|her) body\.  Slowly, the film slips from your eyes and images fade away\.$|^Thin at first, a fine layer of rime tickles your hands and fingertips\.  The hoarfrost smoothly glides between you and [A-Z][a-z]+, turning to a light powder as it traverses the space\.  The white substance clings to [A-Z][a-z]+&apos;s? eyelashes and cheeks for a moment before it becomes charged with spiritual power, then it slowly melts away\.$|^As you begin to chant,? you notice the scent of dry, dusty parchment and feel a cool mist cling to your skin somewhere near your feet\.  You sense the ethereal tendrils of the mist as they coil about your body and notice that the world turns to a yellowish hue as the mist settles about your head\.  Focusing on [A-Z][a-z]+, you feel the transfer of energy pass between you as you return (?:him|her) to life\.$|^Wrapped in an aura of chill, you close your eyes and softly begin to chant\.  As the cold air that surrounds you condenses you feel it slowly ripple outward in waves that turn the breath of those nearby into a fine mist\.  This mist swiftly moves to encompass you and you feel a pair of wings arc over your back\.  With the last words of your chant, you open your eyes and watch as foggy wings rise above you and gently brush against [A-Z][a-z]+\.  As they dissipate in a cold rush against [A-Z][a-z]+, you feel a surge of power spill forth from you and into (?:him|her)\.$|^As .*? begins to chant, your spirit is drawn closer to your body by the scent of dusty, dry parchment\.  Topaz tendrils coil about .*?, and you feel an ancient presence demand that you return to your body\.  All at once .*? focuses upon you and you feel a surge of energy bind you back into your now-living body\.$/
+         elsif text =~ /^Deep and resonating, you feel the chant that falls from your lips instill within you with the strength of your faith\.  You crouch beside [A-Z][a-z]+ and gently lift (?:he|she|him|her) into your arms, your muscles swelling with the power of your deity, and cradle (?:him|her) close to your chest\.  Strength and life momentarily seep from your limbs, causing them to feel laden and heavy, and you are overcome with a sudden weakness\.  With a sigh, you are able to lay [A-Z][a-z]+ back down\.$|^Moisture beads upon your skin and you feel your eyes cloud over with the darkness of a rising storm\.  Power builds upon the air and when you utter the last syllable of your spell thunder rumbles from your lips\.  The sound ripples upon the air, and colling with [A-Z][a-z']+ prone form and a brilliant flash transfers the spiritual energy between you\.$|^Lifting your finger, you begin to chant and draw a series of conjoined circles in the air\.  Each circle turns to mist and takes on a different hue - white, blue, black, red, and green\.  As the last ring is completed, you spread your fingers and gently allow your tips to touch each color before pushing the misty creation towards [A-Z][a-z]+\.  A shock of energy courses through your body as the mist seeps into [A-Z][a-z']+ chest and life is slowly returned to (?:his|her) body\.$|^Crouching beside the prone form of [A-Z][a-z]+, you softly issue the last syllable of your chant\.  Breathing deeply, you take in the scents around you and let the feel of your surroundings infuse you\.  With only your gaze, you track the area and recreate the circumstances of [A-Z][a-z']+ within your mind\.  Touching [A-Z][a-z]+, you follow the lines of the web that holds (?:his|her) soul in place and force it back into (?:his|her) body\.  Raw energy courses through you and you feel your sense of justice and vengeance filling [A-Z][a-z]+ with life\.$|^Murmuring softly, you call upon your connection with the Destroyer,? and feel your words twist into an alien, spidery chant\.  Dark shadows laced with crimson swirl before your eyes and at your forceful command sink into the chest of [A-Z][a-z]+\.  The transference of energy is swift and immediate as you bind [A-Z][a-z]+ back into (?:his|her) body\.$|^Rich and lively, the scent of wild flowers suddenly fills the air as you finish your chant, and you feel alive with the energy of spring\.  With renewal at your fingertips, you gently touch [A-Z][a-z]+ on the brow and revel in the sweet rush of energy that passes through you into (?:him|her|his)\.$|^Breathing slowly, you extend your senses towards the world around you and draw into you the very essence of nature\.  You shift your gaze towards [A-z][a-z]+ and carefully release the energy you've drawn into yourself towards (?:him|her)\.  A rush of energy briefly flows between the two of you as you feel life slowly return to (?:him|her)\.$|^Your surroundings grow dim\.\.\.you lapse into a state of awareness only, unable to do anything\.\.\.$|^Murmuring softly, a mournful chant slips from your lips and you feel welts appear upon your wrists\.  Dipping them briefly, you smear the crimson liquid the leaks from these sudden wounds in a thin line down [A-Z][a-z']+ face\.  Tingling with each second that your skin touches (?:his|hers), you feel the transference of your raw energy pass into [A-Z][a-z]+ and momentarily reel with the pain of its release\.  Slowly, the wounds on your wrists heal, though a lingering throb remains\.$|^Emptying all breathe from your body, you slowly still yourself and close your eyes\.  You reach out with all of your senses and feel a film shift across your vision\.  Opening your eyes, you gaze through a white haze and find images of [A-Z][a-z]+ floating above his prone form\.  Acts of [A-Z][a-z]'s? past, present, and future play out before your clouded vision\.  With conviction and faith, you pluck a future image of [A-Z][a-z]+ from the air and coax (?:he|she|his|her) back into (?:he|she|his|her) body\.  Slowly, the film slips from your eyes and images fade away\.$|^Thin at first, a fine layer of rime tickles your hands and fingertips\.  The hoarfrost smoothly glides between you and [A-Z][a-z]+, turning to a light powder as it traverses the space\.  The white substance clings to [A-Z][a-z]+'s? eyelashes and cheeks for a moment before it becomes charged with spiritual power, then it slowly melts away\.$|^As you begin to chant,? you notice the scent of dry, dusty parchment and feel a cool mist cling to your skin somewhere near your feet\.  You sense the ethereal tendrils of the mist as they coil about your body and notice that the world turns to a yellowish hue as the mist settles about your head\.  Focusing on [A-Z][a-z]+, you feel the transfer of energy pass between you as you return (?:him|her) to life\.$|^Wrapped in an aura of chill, you close your eyes and softly begin to chant\.  As the cold air that surrounds you condenses you feel it slowly ripple outward in waves that turn the breath of those nearby into a fine mist\.  This mist swiftly moves to encompass you and you feel a pair of wings arc over your back\.  With the last words of your chant, you open your eyes and watch as foggy wings rise above you and gently brush against [A-Z][a-z]+\.  As they dissipate in a cold rush against [A-Z][a-z]+, you feel a surge of power spill forth from you and into (?:him|her)\.$|^As .*? begins to chant, your spirit is drawn closer to your body by the scent of dusty, dry parchment\.  Topaz tendrils coil about .*?, and you feel an ancient presence demand that you return to your body\.  All at once .*? focuses upon you and you feel a surge of energy bind you back into your now-living body\.$/
             # raise dead stun
             new_stun.call(30.6)
          elsif text =~ /^Just as you think the falling will never end, you crash through an ethereal barrier which bursts into a dazzling kaleidoscope of color!  Your sensation of falling turns to dizziness and you feel unusually heavy for a moment\.  Everything seems to stop for a prolonged second and then WHUMP!!!/
@@ -1296,15 +1299,13 @@ Thread.new {
          end
 
          if open_style
-            h = open_style.dup
-            h[:end] = text.length
-            line_colors.push(h)
+            line_colors.push(open_style.dup)
+            line_colors[-1][:end] = text.length
             open_style[:start] = 0
          end
          for oc in open_color
-            ocd = oc.dup
-            ocd[:end] = text.length
-            line_colors.push(ocd)
+            line_colors.push(oc.dup)
+            line_colors[-1][:end] = text.length
             oc[:start] = 0
          end
 
@@ -1313,14 +1314,13 @@ Thread.new {
                HIGHLIGHT.each_pair { |regex,colors|
                   pos = 0
                   while (match_data = text.match(regex, pos))
-                     h = {
+                     line_colors.push(
                         :start => match_data.begin(0),
                         :end => match_data.end(0),
                         :fg => colors[0],
                         :bg => colors[1],
                         :ul => colors[2]
-                     }
-                     line_colors.push(h)
+                     )
                      pos = match_data.end(0)
                   end
                }
@@ -1348,12 +1348,11 @@ Thread.new {
                            h[:end] = [ h[:end], name.length ].min
                         }
                         line_colors.delete_if { |h| h[:start] >= h[:end] }
-                        h = {
+                        line_colors.push(
                            :start => (name.length+1),
                            :end => text.length,
                            :fg => 'ff0000',
-                        }
-                        line_colors.push(h)
+                        )
                      end
                   elsif current_stream == 'logons'
                      foo = { 'joins the adventure.' => '007700', 'returns home from a hard day of adventuring.' => '777700', 'has disconnected.' => 'aa7733' }
@@ -1366,12 +1365,11 @@ Thread.new {
                            h[:end] = [ h[:end], name.length ].min
                         }
                         line_colors.delete_if { |h| h[:start] >= h[:end] }
-                        h = {
+                        line_colors.push(
                            :start => (name.length+1),
                            :end => text.length,
                            :fg => foo[logon_type],
-                        }
-                        line_colors.push(h)
+                        )
                      end
                   end
                   unless text =~ /^\[server\]: "(?:kill|connect)/
@@ -1708,10 +1706,7 @@ begin
    loop {
       ch = command_window.getch
       if show_key_code
-         if show_key_code_time.nil?
-            first_code = true
-            show_key_code_time = Time.now
-         end
+         show_key_code_time ||= Time.now
          if (Time.now - show_key_code_time) > 0.1
             show_key_code = false
             show_key_code_time = nil
