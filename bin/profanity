@@ -195,11 +195,19 @@ unless File.exists?(SETTINGS_FILENAME)
 
       <window class='progress' top='lines-11' left='0' width='11' height='1' label='stance:' value='stance' bg='290055'/>
       <window class='progress' top='lines-10' left='0' width='11' height='1' label='mind:' value='mind' bg='663000,442000'/>
-      <window class='progress' top='lines-8' left='0' width='11' height='1' label='health:' value='health' bg='004800,003300'/>
-      <window class='progress' top='lines-7' left='0' width='11' height='1' label='spirit:' value='spirit' bg='333300,222200'/>
-      <window class='progress' top='lines-6' left='0' width='11' height='1' label='mana:' value='mana' bg='0000a0,000055'/>
-      <window class='progress' top='lines-5' left='0' width='11' height='1' label='stam:' value='stamina' bg='003333,002222'/>
-      <window class='progress' top='lines-3' left='0' width='11' height='1' label='load:' value='encumbrance' bg='990033,4c0019' fg='nil,nil,nil,444444'/>
+      <window class='progress' top='lines-9' left='0' width='11' height='1' label='health:' value='health' bg='004800,003300'/>
+      <window class='progress' top='lines-8' left='0' width='11' height='1' label='spirit:' value='spirit' bg='333300,222200'/>
+      <window class='progress' top='lines-7' left='0' width='11' height='1' label='mana:' value='mana' bg='0000a0,000055'/>
+      <window class='progress' top='lines-6' left='0' width='11' height='1' label='stam:' value='stamina' bg='003333,002222'/>
+      <window class='progress' top='lines-5' left='0' width='11' height='1' label='load:' value='encumbrance' bg='990033,4c0019' fg='nil,nil,nil,444444'/>
+
+      <window class='indicator' top='lines-4' left='0' width='11' height='1' label='' value='right' fg='444444,aaaaaa'/>
+      <window class='indicator' top='lines-3' left='0' width='11' height='1' label='' value='left' fg='444444,aaaaaa'/>
+
+<!--
+      <window class='indicator' top='lines-4' left='0' width='11' height='1' label='' value='right_name' fg='444444,aaaaaa'/>
+      <window class='indicator' top='lines-3' left='0' width='11' height='1' label='' value='left_name' fg='444444,aaaaaa'/>
+-->
 
       <window class='countdown' top='lines-2' left='0' width='11' height='1' label='stun:' value='stunned' fg='444444,dddddd' bg='nil,aa0000'/>
       <window class='countdown' top='lines-1' left='0' width='11' height='1' label='rndtime:' value='roundtime' fg='444444,dddddd,dddddd,dddddd' bg='nil,aa0000,0000aa'/>
@@ -1449,11 +1457,29 @@ Thread.new {
                      window.update($1 == 'None' ? 0 : 1)
                      need_update = true
                   end
-               elsif xml =~ /^<(right|left)(?:>|\s.*?>).*?(\S*?)<\/\1>/
-                  if window = indicator_handler[$1]
+               elsif xml =~ /^<(right|left)(>| .+?>)(.+?)<\/\1>/
+                  left_or_right = $1
+                  _noun = $2
+                  name = $3
+                  if window = indicator_handler[left_or_right]
+                      window.clear
+                     if _noun =~ /noun="(.+?)"/
+                        window.label = $1
+                        window.update(1)
+                     else
+                        window.label = '(empty)'
+                        window.update(0)
+                     end
+                     need_update = true
+                  end
+                  if window = indicator_handler["#{left_or_right}_name"]
                      window.clear
-                     window.label = $2
-                     window.update($2 == 'Empty' ? 0 : 1)
+                     if name == 'Empty'
+                        window.label = '(empty)'
+                     else
+                        window.label = name
+                     end
+                     window.update(name == 'Empty' ? 0 : 1)
                      need_update = true
                   end
                elsif xml =~ /^<roundTime value=('|")([0-9]+)\1/
