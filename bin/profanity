@@ -2,7 +2,7 @@
 # encoding: US-ASCII
 =begin
 
-   ProfanityFE v0.5.2
+   ProfanityFE v0.6.0
    Copyright (C) 2013  Matthew Lowe
 
    This program is free software; you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 
 =end
 
-$version = '0.5.2'
+$version = '0.6.0'
 
 require 'thread'
 require 'socket'
@@ -150,6 +150,8 @@ unless File.exists?(SETTINGS_FILENAME)
    <preset id='monsterbold' fg='d2bc2a'/>
    <preset id='familiar' bg='00001a'/>
    <preset id='thoughts' bg='001a00'/>
+   <preset id='roomDescLink' fg='9999ff'/>
+   <!-- <preset id='link' fg='9999ff'/> -->
    <preset id='voln' bg='001a00'/>
    <key id='alt'>
       <key id='f' macro='something'/>
@@ -1230,6 +1232,7 @@ Thread.new {
       need_update = false
       line_colors = Array.new
       open_monsterbold = Array.new
+      open_link = Array.new
       open_preset = Array.new
       open_style = nil
       open_color = Array.new
@@ -1553,6 +1556,21 @@ Thread.new {
                      h[:end] = start_pos
                      line_colors.push(h) if h[:fg] or h[:bg]
                   end
+               elsif xml =~ /^<a/
+                  h = { :start => start_pos }
+                  if open_style and open_style[:name] == 'roomDesc' and PRESET['roomDescLink']
+                     h[:fg] = PRESET['roomDescLink'][0]
+                     h[:bg] = PRESET['roomDescLink'][1]
+                  elsif (open_style.nil? or open_style[:name] != 'roomDesc') and open_monsterbold.empty? and PRESET['link']
+                     h[:fg] = PRESET['link'][0]
+                     h[:bg] = PRESET['link'][1]
+                  end
+                  open_link.push(h)
+               elsif xml == '</a>'
+                  if h = open_link.pop
+                     h[:end] = start_pos
+                     line_colors.push(h) if h[:fg] or h[:bg]
+                  end
                elsif xml =~ /^<color/
                   h = { :start => start_pos }
                   if xml =~ /\sfg=('|")(.*?)\1[\s>]/
@@ -1580,7 +1598,7 @@ Thread.new {
                         open_style = nil
                      end
                   else
-                     open_style = { :start => start_pos }
+                     open_style = { :name => $2, :start => start_pos }
                      if PRESET[$2]
                         open_style[:fg] = PRESET[$2][0]
                         open_style[:bg] = PRESET[$2][1]

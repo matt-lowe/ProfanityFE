@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = 'profanity_fe'
-  s.version     = '0.5.2'
+  s.version     = '0.6.0'
   s.date        = '2019-02-18'
   s.summary     = "ProfanityFE is a third party frontend for Simutronics games."
   s.description = "ProfanityFE is a third party frontend for Simutronics MUD games."
