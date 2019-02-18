@@ -61,6 +61,9 @@ progress_handler = Hash.new
 countdown_handler = Hash.new
 command_window = nil
 command_window_layout = nil
+show_key_code = false
+show_key_code_time = nil
+
 # We need a mutex for the settings because highlights can be accessed during a
 # reload.  For now, it is just used to protect access to HIGHLIGHT, but if we
 # ever support reloading other settings in the future it will have to protect
@@ -1111,14 +1114,7 @@ key_action['send_command'] = proc {
    if cmd =~ /^\.quit/
       exit
    elsif cmd =~ /^\.key/i
-      window = stream_handler['main']
-      window.add_string("* ")
-      window.add_string("* Waiting for key press...")
-      command_window.noutrefresh
-      Curses.doupdate
-      window.add_string("* Detected keycode: #{command_window.getch.to_s}")
-      window.add_string("* ")
-      Curses.doupdate
+      show_key_code = true
    elsif cmd =~ /^\.copy/
       # fixme
    elsif cmd =~ /^\.fixcolor/i
@@ -1685,6 +1681,21 @@ begin
    key_combo = nil
    loop {
       ch = command_window.getch
+      if show_key_code
+         if show_key_code_time.nil?
+            first_code = true
+            show_key_code_time = Time.now
+         end
+         if (Time.now - show_key_code_time) > 0.1
+            show_key_code = false
+            show_key_code_time = nil
+         else
+            stream_handler['main'].add_string "--- key code: #{ch.ord.to_s}"
+            command_window.noutrefresh
+            Curses.doupdate
+            next
+         end
+      end
       if key_combo
          if key_combo[ch.ord].class == Proc
             key_combo[ch.ord].call
