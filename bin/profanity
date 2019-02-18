@@ -2,7 +2,7 @@
 # encoding: US-ASCII
 =begin
 
-   ProfanityFE v0.5.1
+   ProfanityFE v0.5.2
    Copyright (C) 2013  Matthew Lowe
 
    This program is free software; you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 
 =end
 
-$version = '0.5.1'
+$version = '0.5.2'
 
 require 'thread'
 require 'socket'
@@ -569,9 +569,11 @@ setup_key = proc { |xml,binding|
       if key =~ /^[0-9]+$/
          key = key.to_i
       elsif (key.class) == String and (key.length == 1)
-         nil
-      else
+         key = key.ord
+      elsif key_name[key]
          key = key_name[key]
+      else
+         key = nil # FIXME
       end
       if key
          if macro = xml.attributes['macro']
@@ -1666,11 +1668,11 @@ begin
    loop {
       ch = command_window.getch
       if key_combo
-         if key_combo[ch].class == Proc
-            key_combo[ch].call
+         if key_combo[ch.ord].class == Proc
+            key_combo[ch.ord].call
             key_combo = nil
-         elsif key_combo[ch].class == Hash
-            key_combo = key_combo[ch]
+         elsif key_combo[ch.ord].class == Hash
+            key_combo = key_combo[ch.ord]
          else
             key_combo = nil
          end
