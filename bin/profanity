@@ -1467,7 +1467,13 @@ Thread.new {
          # open_color.clear
       }
 
-      while (line = server.gets)
+      loop do
+         begin
+            line = server.gets
+         rescue
+            break
+         end
+         break if line.nil?
          line.chomp!
          if line.empty?
             if current_stream.nil?
