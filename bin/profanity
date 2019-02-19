@@ -64,6 +64,7 @@ command_window_layout = nil
 show_key_code = false
 show_key_code_time = nil
 need_update = true
+simu_key = nil
 
 # We need a mutex for the settings because highlights can be accessed during a
 # reload.  For now, it is just used to protect access to HIGHLIGHT, but if we
@@ -103,6 +104,24 @@ for arg in ARGV
       CUSTOM_COLORS = fix_setting[$1]
    elsif arg =~ /^\-\-settings\-file=(.*?)$/
       SETTINGS_FILENAME = $1
+   elsif arg =~ /\.sal$|Gse\.~xt$/i
+      unless File.exists?(arg)
+         if ARGV.join(' ') =~ /([A-Z]:\\.+?\.(?:sal|~xt))/i
+            arg = $1
+         end
+      end
+      File.open(arg) { |f|
+         text = f.read
+         if text =~ /GAMEHOST=(.+?)\r?$/ and not defined?(HOST)
+            HOST = $1
+         end
+         if text =~ /GAMEPORT=(.+?)\r?$/ and not defined?(PORT)
+            PORT = $1
+         end
+         if text =~ /KEY=(.+?)\r?$/
+            simu_key = $1
+         end
+      }
    end
 end
 
@@ -110,6 +129,9 @@ def log(value)
       File.open('profanity.log', 'a') { |f| f.puts value }
 end
 
+unless defined?(HOST)
+   HOST = '127.0.0.1'
+end
 unless defined?(PORT)
    PORT = 8000
 end
@@ -1233,7 +1255,20 @@ load_layout.call('default')
 
 TextWindow.list.each { |w| w.maxy.times { w.add_string "\n" } }
 
-server = TCPSocket.open('127.0.0.1', PORT)
+server = TCPSocket.open(HOST, PORT)
+
+if simu_key
+   Thread.new {
+      server.puts "#{simu_key}"
+      simu_key = nil
+      sleep 0.5
+      server.puts "/FE:WIZARD /VERSION:1.0.1.22 /P:#{RUBY_PLATFORM} /XML"
+      sleep 1
+      server.puts "<c>"
+      sleep 1
+      server.puts "<c>"
+   }
+end
 
 Thread.new { sleep 15; skip_server_time_offset = false }
 
