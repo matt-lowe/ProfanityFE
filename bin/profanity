@@ -1338,11 +1338,68 @@ Thread.new {
                   if current_stream == 'death'
                      # fixme: has been vaporized!
                      # fixme: ~ off to a rough start
-                     if text =~ /^\s\*\s(The death cry of )?([A-Z][a-z]+) (?:just bit the dust!|echoes in your mind!)/
+                     if text =~ /^\s\*\s(The death cry of )?([A-Z][a-z]+)(?:'s)?( is off to a rough start! (?:He|She))? (just bit the dust|was just put on ice|just took a long walk off of a short pier|is six hundred feet under|just turned (?:his|her) last page|is going home on (?:his|her) shield|just got squashed|has gone to feed the fishes|just punched a one-way ticket|is dust in the wind|echoes in your mind|just gave up the ghost|just lost (?:his|her) way somewhere in the Settlement of Reim|just perished defending a fortress within Reim|flame just burnt out in the Sea of Fire|may just be going home on (?:his|her) shield|is now fish food for the fauna of Caligos Isle|was just reunited with (?:hisr|her) ancestors|was just defeated in Duskruin Arena|just perished underneath Bloodriven Village|failed within the Bank at Bloodriven|failed to bring a shrubbery to the Night at the Academy)( (?:in|of) the Elemental Confluence)?!/
                         front_count = 3
                         front_count += 17 if $1
                         name = $2
-                        text = "#{name} #{Time.now.strftime('%l:%M%P').sub(/^0/, '')}"
+                        rough_start = $3
+                        msg = $4
+                        confluence = $5
+                        area = case msg
+                        when "just bit the dust"
+                           ' (WL)'
+                        when "was just put on ice"
+                           ' (IMT)'
+                        when "just took a long walk off of a short pier"
+                           ' (SOL)'
+                        when "is six hundred feet under"
+                           ' (ZL)'
+                        when /just turned (?:his|her) last page/
+                           ' (TI)'
+                        when /is going home on (?:his|her) shield/
+                           ' (TV)'
+                        when "just got squashed"
+                           ' (Cys)'
+                        when "has gone to feed the fishes"
+                           ' (RR)'
+                        when "just punched a one-way ticket"
+                           ' (Teras)'
+                        when "is dust in the wind"
+                           ' (FWI)'
+                        when "echoes in your mind"
+                           ' (Rift)'
+                        when "just gave up the ghost"
+                           ' (Var)'
+                        when /just lost (?:his|her) way somewhere in the Settlement of Reim/
+                           ' (Reim)'
+                        when "just perished defending a fortress within Reim"
+                           ' (RFD)'
+                        when "flame just burnt out in the Sea of Fire"
+                           ' (SOS)'
+                        when /may just be going home on (?:his|her) shield/
+                           ' (AR)'
+                        when "is now fish food for the fauna of Caligos Isle"
+                           ' (EGCI)'
+                        when /was just reunited with (?:hisr|her) ancestors/
+                           ' (EGFM)'
+                        when "was just defeated in Duskruin Arena"
+                           ' (DR)'
+                        when "just perished underneath Bloodriven Village"
+                           ' (DRS)'
+                        when "failed within the Bank at Bloodriven"
+                           ' (DRBH)'
+                        when "failed to bring a shrubbery to the Night at the Academy"
+                           ' (NA)'
+                        else
+                           ''
+                        end
+                        if confluence and not area.empty?
+                           area = area.chop.concat ':EC)'
+                        elsif rough_start and not area.empty?
+                           area = area.chop.concat ':RS)'
+                        end
+                        text = "#{name} #{Time.now.strftime('%l:%M%P').sub(/^0/, '')}#{area}"
+
                         line_colors.each { |h|
                            h[:start] -= front_count
                            h[:end] = [ h[:end], name.length ].min
