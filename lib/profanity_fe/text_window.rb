@@ -40,7 +40,7 @@ class TextWindow < Curses::Window
 				fg = color_list.map { |h| h[:fg] }.find { |fg| !fg.nil? }
 				bg = color_list.map { |h| h[:bg] }.find { |bg| !bg.nil? }
 				ul = color_list.map { |h| h[:ul] == "true" }.find { |ul| ul }
-				attron(color_pair(get_color_pair_id(fg, bg))|(ul ? Curses::A_UNDERLINE : Curses::A_NORMAL)) {
+				attron(Curses::color_pair(get_color_pair_id(fg, bg))|(ul ? Curses::A_UNDERLINE : Curses::A_NORMAL)) {
 					addstr str
 				}
 			end

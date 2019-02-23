@@ -30,14 +30,14 @@ class CountdownWindow < Curses::Window
 					str = "#{@label}#{'?'.rjust(self.maxx - @label.length)}"
 					left_background_str = str[0,1].to_s
 					right_background_str = str[(left_background_str.length),(@label.length + (self.maxx - @label.length))].to_s
-					attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) {
+					attron(Curses::color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) {
 						addstr left_background_str
 					}
-					attron(color_pair(get_color_pair_id(@fg[2], @bg[2]))|Curses::A_NORMAL) {
+					attron(Curses::color_pair(get_color_pair_id(@fg[2], @bg[2]))|Curses::A_NORMAL) {
 						addstr right_background_str
 					}
 				else
-					attron(color_pair(get_color_pair_id(@fg[0], @bg[0]))|Curses::A_NORMAL) {
+					attron(Curses::color_pair(get_color_pair_id(@fg[0], @bg[0]))|Curses::A_NORMAL) {
 						addstr str
 					}
 				end
@@ -46,17 +46,17 @@ class CountdownWindow < Curses::Window
 				secondary_background_str = str[left_background_str.length,(@secondary_value - @value)].to_s
 				right_background_str = str[(left_background_str.length + secondary_background_str.length),(@label.length + (self.maxx - @label.length))].to_s
 				if left_background_str.length > 0
-					attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) {
+					attron(Curses::color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) {
 						addstr left_background_str
 					}
 				end
 				if secondary_background_str.length > 0
-					attron(color_pair(get_color_pair_id(@fg[2], @bg[2]))|Curses::A_NORMAL) {
+					attron(Curses::color_pair(get_color_pair_id(@fg[2], @bg[2]))|Curses::A_NORMAL) {
 						addstr secondary_background_str
 					}
 				end
 				if right_background_str.length > 0
-					attron(color_pair(get_color_pair_id(@fg[3], @bg[3]))|Curses::A_NORMAL) {
+					attron(Curses::color_pair(get_color_pair_id(@fg[3], @bg[3]))|Curses::A_NORMAL) {
 						addstr right_background_str
 					}
 				end

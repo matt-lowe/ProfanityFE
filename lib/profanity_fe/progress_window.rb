@@ -32,7 +32,7 @@ class ProgressWindow < Curses::Window
 		percent = [[(@value/@max_value.to_f), 0.to_f].max, 1].min
 		if (@value == 0) and (fg[3] or bg[3])
 			setpos(0, 0)
-			attron(color_pair(get_color_pair_id(@fg[3], @bg[3]))|Curses::A_NORMAL) {
+			attron(Curses::color_pair(get_color_pair_id(@fg[3], @bg[3]))|Curses::A_NORMAL) {
 				addstr str
 			}
 		else
@@ -45,17 +45,17 @@ class ProgressWindow < Curses::Window
 			right_str = str[(left_str.length + middle_str.length),(@label.length + (self.maxx - @label.length))].to_s
 			setpos(0, 0)
 			if left_str.length > 0
-				attron(color_pair(get_color_pair_id(@fg[0], @bg[0]))|Curses::A_NORMAL) {
+				attron(Curses::color_pair(get_color_pair_id(@fg[0], @bg[0]))|Curses::A_NORMAL) {
 					addstr left_str
 				}
 			end
 			if middle_str.length > 0
-				attron(color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) {
+				attron(Curses::color_pair(get_color_pair_id(@fg[1], @bg[1]))|Curses::A_NORMAL) {
 					addstr middle_str
 				}
 			end
 			if right_str.length > 0
-				attron(color_pair(get_color_pair_id(@fg[2], @bg[2]))|Curses::A_NORMAL) {
+				attron(Curses::color_pair(get_color_pair_id(@fg[2], @bg[2]))|Curses::A_NORMAL) {
 					addstr right_str
 				}
 			end

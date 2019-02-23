@@ -29,7 +29,6 @@ require 'thread'
 require 'socket'
 require 'rexml/document'
 require 'curses'
-include Curses
 
 require 'profanity_fe/text_window'
 require 'profanity_fe/progress_window'
@@ -663,7 +662,6 @@ load_settings_file = proc { |reload|
          $stdout.puts $!.backtrace[0..1]
          log $!
          log $!.backtrace[0..1]
-
       end
    }
 }
@@ -736,7 +734,7 @@ do_macro = proc { |macro|
 
 key_action['resize'] = proc {
    # fixme: re-word-wrap
-   window = Window.new(0,0,0,0)
+   window = Curses::Window.new(0,0,0,0)
    window.refresh
    window.close
    first_text_window = true
@@ -1837,6 +1835,6 @@ begin
 rescue
    File.open('profanity.log', 'a') { |f| f.puts $!; f.puts $!.backtrace[0...4] }
 ensure
-   server.close rescue()
+   server.close rescue nil
    Curses.close_screen
 end
