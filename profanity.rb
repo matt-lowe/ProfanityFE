@@ -1850,12 +1850,6 @@ Thread.new {
 								end
 							end
 						end
-					elsif xml =~ /^<progressBar id='(.*?)' value='[0-9]+' text='\1 (\-?[0-9]+)\/([0-9]+)'/
-						if window = progress_handler[$1]
-							if window.update($2.to_i, $3.to_i)
-								need_update = true
-							end
-						end
 					elsif xml =~ /^<progressBar id='encumlevel' value='([0-9]+)' text='(.*?)'/
 						if window = progress_handler['encumbrance']
 							if $2 == 'Overloaded'
@@ -1881,6 +1875,12 @@ Thread.new {
 								value = $1.to_i
 							end
 							if window.update(value, 110)
+								need_update = true
+							end
+						end
+					elsif xml =~ /^<progressBar id='(.*?)' value='[0-9]+' text='.*?\s+(\-?[0-9]+)\/([0-9]+)'/
+						if window = progress_handler[$1]
+							if window.update($2.to_i, $3.to_i)
 								need_update = true
 							end
 						end
