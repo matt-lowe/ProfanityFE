@@ -447,10 +447,12 @@ for arg in ARGV
 		exit
 	elsif arg =~ /^\-\-port=([0-9]+)$/
 		PORT = $1.to_i
-	elsif arg =~ /^\-\-default\-color\-id=([0-9]+)$/
+	elsif arg =~ /^\-\-default\-color\-id=(-?[0-9]+)$/
 		DEFAULT_COLOR_ID = $1.to_i
-	elsif arg =~ /^\-\-default\-background\-color\-id=([0-9]+)$/
+	elsif arg =~ /^\-\-default\-background\-color\-id=(-?[0-9]+)$/
 		DEFAULT_BACKGROUND_COLOR_ID = $1.to_i
+	elsif arg =~ /^\-\-use\-default\-colors$/
+		USE_DEFAULT_COLORS = true
 	elsif arg =~ /^\-\-custom\-colors=(on|off|yes|no)$/
 		fix_setting = { 'on' => true, 'yes' => true, 'off' => false, 'no' => false }
 		CUSTOM_COLORS = fix_setting[$1]
@@ -471,6 +473,9 @@ unless defined?(DEFAULT_COLOR_ID)
 end
 unless defined?(DEFAULT_BACKGROUND_COLOR_ID)
 	DEFAULT_BACKGROUND_COLOR_ID = 0
+end
+if defined?(USE_DEFAULT_COLORS)
+	Curses.use_default_colors
 end
 unless defined?(SETTINGS_FILENAME)
 	SETTINGS_FILENAME = File.expand_path('~/.profanity.xml')
