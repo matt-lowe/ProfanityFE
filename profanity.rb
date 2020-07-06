@@ -964,6 +964,8 @@ load_settings_file = proc { |reload|
 						if r
 							HIGHLIGHT[r] = [ e.attributes['fg'], e.attributes['bg'], e.attributes['ul'] ]
 						end
+					elsif e.name == 'key'
+						setup_key.call(e, key_binding)
 					end
 					# These are things that we ignore if we're doing a reload of the settings file
 					if !reload
@@ -971,8 +973,6 @@ load_settings_file = proc { |reload|
 							PRESET[e.attributes['id']] = [ e.attributes['fg'], e.attributes['bg'] ]
 						elsif (e.name == 'layout') and (layout_id = e.attributes['id'])
 							LAYOUT[layout_id] = e
-						elsif e.name == 'key'
-							setup_key.call(e, key_binding)
 						end
 					end
 				}
