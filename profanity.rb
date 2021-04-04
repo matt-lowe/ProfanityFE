@@ -804,7 +804,7 @@ fix_layout_number = proc { |str|
 	str = str.gsub('lines', Curses.lines.to_s).gsub('cols', Curses.cols.to_s)
 	str.untaint
 	begin
-		proc { $SAFE = 1; eval(str) }.call.to_i
+		proc { eval(str) }.call.to_i
 	rescue
 		$stderr.puts $!
 		$stderr.puts $!.backtrace[0..1]
