@@ -1993,10 +1993,15 @@ Thread.new {
 							end
 						end
 					elsif xml =~ /^<LaunchURL src="([^"]+)"/
-						url = "\"https://www.play.net#{$1}\""
+						url = "https://www.play.net#{$1}"
 						# assume linux if not mac
-						cmd = RUBY_PLATFORM =~ /darwin/ ? "open" : "firefox"
-						system("#{cmd} #{url}")
+						# TODO somehow determine whether we are running in a gui environment?
+						# for now, just print it instead of trying to open it
+						#cmd = RUBY_PLATFORM =~ /darwin/ ? "open" : "firefox"
+						#system("#{cmd} #{url}")
+						stream_handler['main'].add_string ' *'
+						stream_handler['main'].add_string " * LaunchURL: #{url}"
+						stream_handler['main'].add_string ' *'
 					else
 						nil
 					end
